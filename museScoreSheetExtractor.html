@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG to PDF Converter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+
+<body>
+    <div><b>1. Choose HAR to extract SVG link and download them all</b></div>
+    <input type="file" id="harInput" accept=".har">
+    <button onclick="extractLinks()">Extract Links</button>
+    <button onclick="downloadAll()">Download All</button>
+    <ul id="linkList"></ul>
+    <div><b>2. Choose downloaded SVGs (score_X.svg) to create PDF</b></div>
+    <input type="file" id="svgInput" multiple accept="image/svg+xml">
+    <button onclick="convertToPDF()">Convert to PDF</button>
+
+    <script>
+        let extractedLinks = new Set();
+        let extractedLinksA = new Set();
+
+        function extractLinks() {
+            const input = document.getElementById('harInput');
+            const file = input.files[0];
+            if (!file) {
+                alert("Please select a HAR file.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const harData = JSON.parse(event.target.result);
+                    extractedLinks.clear();
+                    const regex = /"https?:\/\/[^" ]*score_\d+\.svg[^" ]*"/g;
+                    const jsonString = JSON.stringify(harData);
+                    let match;
+                    while ((match = regex.exec(jsonString)) !== null) {
+                        extractedLinks.add(match[0].slice(1, -2));
+                    }
+
+                    const linkList = document.getElementById("linkList");
+                    linkList.innerHTML = "";
+                    extractedLinks.forEach(link => {
+                        const li = document.createElement("li");
+                        const a = document.createElement("a");
+                        a.href = link;
+                        a.textContent = link;
+                        a.target = "_blank";
+                        li.appendChild(a);
+                        linkList.appendChild(li);
+                    });
+                } catch (error) {
+                    alert("Error parsing HAR file.");
+                    console.error(error);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        async function convertToPDF() {
+            const input = document.getElementById('svgInput');
+            const files = Array.from(input.files);
+
+            if (files.length === 0) {
+                alert("Please select at least one SVG file.");
+                return;
+            }
+
+            files.sort((a, b) => {
+                const numA = parseInt(a.name.match(/score_(\d+)/)?.[1] || 0, 10);
+                const numB = parseInt(b.name.match(/score_(\d+)/)?.[1] || 0, 10);
+                return numA - numB;
+            });
+
+            const pdfDoc = await PDFLib.PDFDocument.create();
+
+            for (const file of files) {
+                const svgText = await file.text();
+                const img = new Image();
+                img.src = 'data:image/svg+xml;base64,' + btoa(svgText);
+                await new Promise(resolve => img.onload = resolve);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(img, 0, 0);
+
+                const pngDataUrl = canvas.toDataURL("image/png");
+                const pngImage = await pdfDoc.embedPng(pngDataUrl);
+                const page = pdfDoc.addPage([pngImage.width, pngImage.height]);
+                page.drawImage(pngImage, { x: 0, y: 0, width: pngImage.width, height: pngImage.height });
+            }
+
+            const pdfBytes = await pdfDoc.save();
+            const blob = new Blob([pdfBytes], { type: "application/pdf" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "converted.pdf";
+            link.click();
+        }
+    </script>
+</body>
+
+</html>
