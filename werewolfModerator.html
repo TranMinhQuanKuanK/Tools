@@ -1,0 +1,1337 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Werewolf Moderator (Single File)</title>
+  <style>
+    :root { --bg:#0b1020; --card:#121a33; --muted:#9aa6c3; --txt:#e7ecff; --bad:#ff5b6e; --good:#62ffa7; --warn:#ffd166; }
+    *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    body{margin:0;background:linear-gradient(180deg,#070a14,#0b1020);color:var(--txt)}
+    header{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:rgba(11,16,32,.85);backdrop-filter:blur(8px);z-index:10}
+    h1{margin:0;font-size:18px}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:280px}
+    .card{background:rgba(18,26,51,.9);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px}
+    .muted{color:var(--muted)}
+    button{cursor:pointer;border:1px solid rgba(255,255,255,.12);background:#1a2550;color:var(--txt);padding:10px 12px;border-radius:12px}
+    button:hover{filter:brightness(1.08)}
+    button.secondary{background:transparent}
+    button.danger{background:#4a1520;border-color:rgba(255,255,255,.08)}
+    button.good{background:#0f3a2a;border-color:rgba(255,255,255,.08)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    input, select, textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0f1631;color:var(--txt)}
+    textarea{min-height:110px;resize:vertical}
+    .screen{display:none}
+    .screen.active{display:block}
+    .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+    .badge{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font-size:12px}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:8px}
+    .playerBtn{
+      grid-column:span 3;
+      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.05)
+    }
+    @media (max-width:920px){ .playerBtn{grid-column:span 4} }
+    @media (max-width:640px){ .playerBtn{grid-column:span 6} }
+    .dead{color:rgba(255,255,255,.6);border-color:rgba(255,91,110,.35);background:rgba(255,91,110,.08)}
+    .dead .name{ text-decoration:line-through }
+    .mini{font-size:12px;color:var(--muted)}
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:10px 0}
+    .table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    .table td{padding:10px 12px;background:rgba(255,255,255,.04);border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+    .table td:first-child{border-left:1px solid rgba(255,255,255,.08);border-radius:12px 0 0 12px}
+    .table td:last-child{border-right:1px solid rgba(255,255,255,.08);border-radius:0 12px 12px 0}
+    .qty{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+    .qty button{padding:6px 10px;border-radius:10px}
+    .log{white-space:pre-wrap;background:#0a1026;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;min-height:120px}
+    .ok{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    .roleRow{display:grid;grid-template-columns: 1.2fr 1fr; gap:10px; align-items:center; padding:10px 12px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(255,255,255,.04)}
+    .roleCounts{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .kpi{padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.04)}
+    .kpi b{display:block;font-size:14px;color:var(--txt)}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Werewolf Moderator</h1>
+</header>
+
+<div class="wrap">
+
+  <!-- SCREEN 1 -->
+  <section id="s1" class="screen active">
+    <div class="topbar">
+      <div class="badge">Screen 1 · Setup</div>
+      <div class="pill"><span class="mini">Players:</span> <b id="playersCount">12</b></div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="row" style="align-items:flex-end">
+            <div class="col">
+              <label class="mini">Player count</label>
+              <input id="playerCountInput" type="number" min="3" max="30" value="12"/>
+            </div>
+            <div class="col">
+              <button id="applyPlayerCountBtn">Apply</button>
+            </div>
+          </div>
+          <div class="hr"></div>
+          <label class="mini">Players (seating order) — one per line</label>
+          <textarea id="playersTextarea" spellcheck="false"></textarea>
+          <div class="hr"></div>
+          <div class="row">
+            <button id="toRoleConfigBtn" class="secondary">Role configuration</button>
+            <button id="playBtn">Play</button>
+          </div>
+          <p class="mini" style="margin-top:10px">
+            Cards dealt physically? Use Screen 2.5 to manually assign roles (optional but recommended).
+          </p>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="badge">Quick status</div>
+          <div class="hr"></div>
+          <div class="mini">Roles total: <b id="rolesTotal">0</b> / <b id="rolesCap">12</b></div>
+          <div class="mini">Phase: <b id="phaseLabel">Setup</b></div>
+          <div class="hr"></div>
+          <div class="mini">Win rules:</div>
+          <ul class="mini" style="margin:8px 0 0 18px">
+            <li>If #wolves == #non-wolves → wolves win</li>
+            <li>If all wolves die → villagers win</li>
+            <li>If Sober is voted and killed → Sober wins</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 2 -->
+  <section id="s2" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 2 · Role configuration</div>
+      <div class="pill"><span class="mini">Total must ≤ players</span></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <div class="badge">Evil side</div>
+          <table class="table" id="roleTableEvil"></table>
+        </div>
+        <div class="col">
+          <div class="badge">Good side</div>
+          <table class="table" id="roleTableGood"></table>
+          <div class="hr"></div>
+          <div class="badge">Others</div>
+          <table class="table" id="roleTableOther"></table>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <div class="row" style="align-items:center;justify-content:space-between">
+        <button id="backToS1Btn" class="secondary">Back</button>
+        <div class="row" style="align-items:center;gap:10px">
+          <div class="mini">Roles total: <b id="rolesTotal2">0</b> / <b id="rolesCap2">12</b></div>
+          <button id="toAssignRolesBtn">Assign roles</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 2.5 -->
+  <section id="s25" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 2.5 · Manual role assignment</div>
+      <div class="pill"><span class="mini">Must respect configured counts</span></div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="badge">Players</div>
+            <div class="row">
+              <button id="autoFillRolesBtn" class="secondary">Auto-fill (random)</button>
+              <button id="clearRolesBtn" class="secondary">Clear</button>
+            </div>
+          </div>
+          <div class="hr"></div>
+          <div id="assignRolesList" style="display:flex;flex-direction:column;gap:10px"></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="badge">Remaining counts</div>
+          <div class="hr"></div>
+          <div class="roleCounts" id="remainingCounts"></div>
+          <div class="hr"></div>
+          <div class="mini" id="assignValidation"></div>
+          <div class="hr"></div>
+          <div class="row" style="justify-content:space-between">
+            <button id="backToRoleConfigBtn" class="secondary">Back</button>
+            <button id="startGameBtn">Start game</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 3 -->
+  <section id="s3" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 3 · Night</div>
+      <div class="pill"><span class="mini">Step:</span> <b id="nightStepLabel">—</b></div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="row" style="align-items:center;justify-content:space-between">
+            <div>
+              <div class="mini">Night #<b id="nightNumber">1</b></div>
+              <div class="mini">Living: <b id="livingCount">0</b></div>
+            </div>
+            <div class="row">
+              <button id="nightPrevBtn" class="secondary">Prev</button>
+              <button id="nightNextBtn">Next</button>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+          <div id="nightPanel"></div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="badge">Players</div>
+          <div class="hr"></div>
+          <div id="playersGridNight" class="grid"></div>
+          <div class="hr"></div>
+          <div class="row">
+            <button id="toDayBtn" class="good">Go to Day</button>
+            <button id="toManualBtn" class="secondary">Manual kill/revive</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 4 -->
+  <section id="s4" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 4 · Day</div>
+      <div class="pill"><span class="mini">Timer:</span> <b id="dayTimer">00:00</b></div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="badge">Announcements</div>
+          <div class="hr"></div>
+          <div id="dayAnnouncements" class="log"></div>
+          <div class="hr"></div>
+          <div class="row">
+            <button id="startDayTimerBtn">Start timer</button>
+            <button id="stopDayTimerBtn" class="secondary">Stop</button>
+            <button id="resetDayTimerBtn" class="secondary">Reset</button>
+          </div>
+          <div class="hr"></div>
+          <div class="row">
+            <button id="toVoteBtn">Vote</button>
+            <button id="toNextNightBtn" class="secondary">Go to Next Night</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="badge">Last night logs</div>
+          <div class="hr"></div>
+          <div id="nightLog" class="log"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 5 -->
+  <section id="s5" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 5 · Vote</div>
+      <div class="pill"><span class="mini">Vote timer:</span> <b id="voteTimer">00:00</b></div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="badge">Pick a player</div>
+          <div class="hr"></div>
+          <div id="playersGridVote" class="grid"></div>
+          <div class="hr"></div>
+
+          <div class="mini">Selected: <b id="voteSelectedLabel">—</b></div>
+          <div class="hr"></div>
+
+          <div class="row">
+            <button id="startVoteTimerBtn">Start</button>
+            <button id="stopVoteTimerBtn" class="secondary">Stop</button>
+            <button id="resetVoteTimerBtn" class="secondary">Reset</button>
+          </div>
+
+          <div class="hr"></div>
+          <div class="row">
+            <button id="killByVoteBtn" class="danger">Kill (vote)</button>
+            <button id="spareByVoteBtn" class="good">Spare</button>
+          </div>
+
+          <div class="hr"></div>
+          <button id="backToDayBtn" class="secondary">Back</button>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="badge">Notes</div>
+          <div class="hr"></div>
+          <div class="mini">
+            “Sober wins” triggers only if they are killed by vote.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 6 -->
+  <section id="s6" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 6 · Manual kill/revive (admin)</div>
+      <div class="pill"><span class="mini">Click to toggle</span></div>
+    </div>
+
+    <div class="card">
+      <div id="playersGridManual" class="grid"></div>
+      <div class="hr"></div>
+      <div class="row">
+        <button id="backFromManualBtn" class="secondary">Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 7 -->
+  <section id="s7" class="screen">
+    <div class="topbar">
+      <div class="badge">Screen 7 · Winner</div>
+      <div class="pill"><span class="mini">Result</span></div>
+    </div>
+
+    <div class="card">
+      <h2 id="winnerTitle" style="margin:0 0 10px 0"></h2>
+      <div id="winnerDetails" class="log"></div>
+      <div class="hr"></div>
+      <div class="row">
+        <button id="restartBtn" class="secondary">Restart (keep players+roles)</button>
+        <button id="backToDayFromWinBtn">Back to Day</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  // ----- State -----
+  const ROLE = {
+    WEREWOLF: "Werewolf",
+    WOLFCUB: "Wolf cub",
+    SEER: "Seer",
+    BODYGUARD: "Bodyguard",
+    HUNTER: "Hunter",
+    WITCH: "Witch",
+    VILLAGER: "Villager",
+    SOBER: "Sober",
+  };
+
+  const SIDE = { EVIL: "evil", GOOD: "good", OTHER: "other" };
+
+  const roleMeta = {
+    [ROLE.WEREWOLF]: { side: SIDE.EVIL, note: "Bite at night" },
+    [ROLE.WOLFCUB]:  { side: SIDE.EVIL, note: "If dies, next night wolves bite 2" },
+    [ROLE.SEER]:     { side: SIDE.GOOD, note: "Reveal good/evil" },
+    [ROLE.BODYGUARD]:{ side: SIDE.GOOD, note: "Protect 1 from bites" },
+    [ROLE.HUNTER]:   { side: SIDE.GOOD, note: "If dies at night, chosen target dies too" },
+    [ROLE.WITCH]:    { side: SIDE.GOOD, note: "1 save potion + 1 kill potion" },
+    [ROLE.VILLAGER]: { side: SIDE.GOOD, note: "No power" },
+    [ROLE.SOBER]:    { side: SIDE.OTHER, note: "If voted and killed, wins" },
+  };
+
+  const defaultRoles = {
+    [ROLE.WEREWOLF]: 3,
+    [ROLE.WOLFCUB]: 1,
+    [ROLE.SEER]: 1,
+    [ROLE.BODYGUARD]: 1,
+    [ROLE.HUNTER]: 1,
+    [ROLE.WITCH]: 1,
+    [ROLE.VILLAGER]: 5,
+    [ROLE.SOBER]: 0,
+  };
+
+  const state = {
+    players: [], // {id, name, alive, role}
+    playerCount: 12,
+    roles: { ...defaultRoles },
+    gameStarted: false,
+
+    night: {
+      number: 1,
+      stepIndex: 0,
+      steps: [],
+      wolfSelectedIds: [],
+      bites: [],
+      seerInspectId: null,
+      seerResult: null,
+      bodyguardId: null,
+      witchSaveUsed: false,
+      witchKillUsed: false,
+      witchSaved: false,
+      witchKillId: null,
+      hunterMarkId: null,
+      hunterDied: false,
+    },
+
+    day: {
+      announcements: [],
+      lastNightLog: [],
+      dayDeaths: [],
+      wolfCubDiedLastDay: false,
+    },
+
+    vote: { selectedId: null, timer: 0, interval: null },
+    timers: { day: 0, dayInterval: null },
+
+    winner: null,
+  };
+
+  // ----- Helpers -----
+  const $ = (id) => document.getElementById(id);
+
+  function showScreen(n) {
+    for (const el of document.querySelectorAll(".screen")) el.classList.remove("active");
+    $(typeof n === "string" ? n : "s"+n).classList.add("active");
+    updateQuickStatus();
+  }
+
+  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+  function roleTotal(){ return Object.values(state.roles).reduce((a,b)=>a+b,0); }
+  function livingPlayers(){ return state.players.filter(p => p.alive); }
+
+  function fmtTime(sec){
+    sec = Math.max(0, sec|0);
+    const m = String(Math.floor(sec/60)).padStart(2,"0");
+    const s = String(sec%60).padStart(2,"0");
+    return `${m}:${s}`;
+  }
+
+  function isEvilRole(role){ return roleMeta[role]?.side === SIDE.EVIL; }
+  function labelPlayer(id){
+    if (!id) return "";
+    const p = state.players.find(x => x.id === id);
+    return p ? `${p.id}. ${p.name}` : "";
+  }
+
+  function linesToPlayers(text, count){
+    const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
+    const out = [];
+    for (let i=0;i<count;i++) out.push(lines[i] || `Player ${i+1}`);
+    return out;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  function updateQuickStatus(){
+    $("playersCount").textContent = state.playerCount;
+    $("rolesCap").textContent = state.playerCount;
+    $("rolesCap2").textContent = state.playerCount;
+    $("rolesTotal").textContent = roleTotal();
+    $("rolesTotal2").textContent = roleTotal();
+    const active = document.querySelector(".screen.active")?.id || "s1";
+    const phase =
+      active === "s1" || active === "s2" || active === "s25" ? "Setup" :
+      active === "s3" ? "Night" :
+      active === "s4" ? "Day" :
+      active === "s5" ? "Vote" :
+      active === "s6" ? "Admin" :
+      active === "s7" ? "Winner" : "—";
+    $("phaseLabel").textContent = phase;
+  }
+
+  // ----- Night steps -----
+  function buildNightSteps(){
+    const steps = [];
+    if (state.roles[ROLE.WEREWOLF] + state.roles[ROLE.WOLFCUB] > 0) steps.push("werewolf");
+    if (state.roles[ROLE.SEER] > 0) steps.push("seer");
+    if (state.roles[ROLE.BODYGUARD] > 0) steps.push("bodyguard");
+    if (state.roles[ROLE.WITCH] > 0) steps.push("witch");
+    if (state.roles[ROLE.HUNTER] > 0) steps.push("hunter");
+    return steps;
+  }
+
+  function resetNightState({keepPotions=false} = {}){
+    state.night.stepIndex = 0;
+    state.night.steps = buildNightSteps();
+    state.night.wolfSelectedIds = [];
+    state.night.bites = [];
+    state.night.seerInspectId = null;
+    state.night.seerResult = null;
+    state.night.bodyguardId = null;
+    state.night.witchSaved = false;
+    state.night.witchKillId = null;
+    state.night.hunterMarkId = null;
+    state.night.hunterDied = false;
+    if (!keepPotions){
+      state.night.witchSaveUsed = false;
+      state.night.witchKillUsed = false;
+    }
+  }
+
+  // ----- UI Builders -----
+  function renderPlayersTextarea(){ $("playersTextarea").value = state.players.map(p => p.name).join("\n"); }
+
+  function applyPlayersFromTextarea(){
+    const names = linesToPlayers($("playersTextarea").value, state.playerCount);
+    const prev = state.players;
+    state.players = names.map((name, idx) => ({
+      id: idx+1,
+      name,
+      alive: prev[idx]?.alive ?? true,
+      role: prev[idx]?.role ?? null
+    }));
+  }
+
+  function renderRoleTables(){
+    const evil = [ROLE.WEREWOLF, ROLE.WOLFCUB];
+    const good = [ROLE.SEER, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.VILLAGER];
+    const other = [ROLE.SOBER];
+
+    function cssId(s){ return s.replace(/\s+/g,"_").toLowerCase(); }
+
+    function row(role){
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td style="width:55%">
+          <div><b>${role}</b></div>
+          <div class="mini">${roleMeta[role].note}</div>
+        </td>
+        <td style="width:45%;text-align:right">
+          <div class="qty">
+            <button class="secondary" data-role="${role}" data-delta="-1">−</button>
+            <b id="qty_${cssId(role)}">${state.roles[role]}</b>
+            <button data-role="${role}" data-delta="1">+</button>
+          </div>
+        </td>
+      `;
+      return tr;
+    }
+
+    const tE = $("roleTableEvil"); tE.innerHTML = ""; evil.forEach(r => tE.appendChild(row(r)));
+    const tG = $("roleTableGood"); tG.innerHTML = ""; good.forEach(r => tG.appendChild(row(r)));
+    const tO = $("roleTableOther"); tO.innerHTML = ""; other.forEach(r => tO.appendChild(row(r)));
+
+    for (const btn of document.querySelectorAll("table .qty button")){
+      btn.onclick = () => {
+        const role = btn.dataset.role;
+        const delta = parseInt(btn.dataset.delta,10);
+        const next = state.roles[role] + delta;
+        if (next < 0) return;
+
+        const totalNext = roleTotal() + delta;
+        if (totalNext > state.playerCount) return;
+
+        state.roles[role] = next;
+
+        for (const r of Object.keys(state.roles)){
+          const el = document.getElementById("qty_"+cssId(r));
+          if (el) el.textContent = state.roles[r];
+        }
+        updateQuickStatus();
+      };
+    }
+  }
+
+  function renderPlayersGrid(elId, opts = {}){
+    const el = $(elId);
+    el.innerHTML = "";
+    state.players.forEach(p => {
+      const btn = document.createElement("button");
+      btn.className = "playerBtn" + (p.alive ? "" : " dead");
+      btn.innerHTML = `
+        <span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span>
+        <span class="mini">${p.role ? escapeHtml(p.role) : "—"}</span>
+      `;
+      btn.disabled = opts.disableDeadClick ? !p.alive : false;
+      btn.onclick = () => opts.onClick && opts.onClick(p);
+      el.appendChild(btn);
+    });
+  }
+
+  // ----- Assign Roles Screen -----
+  function rolePoolFromConfig(){
+    const pool = [];
+    for (const [role, qty] of Object.entries(state.roles)){
+      for (let i=0;i<qty;i++) pool.push(role);
+    }
+    // fill remaining with Villager
+    while (pool.length < state.playerCount) pool.push(ROLE.VILLAGER);
+    return pool;
+  }
+
+  function countAssigned(){
+    const counts = {};
+    for (const r of Object.keys(state.roles)) counts[r] = 0;
+    counts[ROLE.VILLAGER] ??= 0;
+    state.players.forEach(p => {
+      const r = p.role || ROLE.VILLAGER;
+      counts[r] = (counts[r]||0) + 1;
+    });
+    return counts;
+  }
+
+  function remainingCounts(){
+    const assigned = countAssigned();
+    const remaining = {};
+    for (const [role, qty] of Object.entries(state.roles)){
+      remaining[role] = qty - (assigned[role] || 0);
+    }
+    // Villager is special: it's the filler, no cap needed here (we allow remainder)
+    remaining[ROLE.VILLAGER] = state.playerCount - Object.values(assigned).reduce((a,b)=>a+b,0);
+    return remaining;
+  }
+
+  function renderAssignRoles(){
+    const list = $("assignRolesList");
+    list.innerHTML = "";
+
+    const allowedRoles = Object.keys(state.roles).filter(r => state.roles[r] > 0);
+    // always allow Villager (filler)
+    if (!allowedRoles.includes(ROLE.VILLAGER)) allowedRoles.push(ROLE.VILLAGER);
+
+    state.players.forEach(p => {
+      const row = document.createElement("div");
+      row.className = "roleRow";
+      row.innerHTML = `
+        <div>
+          <b>${p.id}. ${escapeHtml(p.name)}</b>
+          <div class="mini">Seat #${p.id}</div>
+        </div>
+        <div>
+          <select data-pid="${p.id}">
+            ${allowedRoles.map(r => `<option value="${escapeHtml(r)}" ${p.role===r ? "selected":""}>${escapeHtml(r)}</option>`).join("")}
+          </select>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+
+    for (const sel of list.querySelectorAll("select")){
+      sel.onchange = () => {
+        const pid = parseInt(sel.dataset.pid,10);
+        const p = state.players.find(x => x.id === pid);
+        if (!p) return;
+
+        const nextRole = sel.value;
+
+        // Enforce caps for non-villager roles (configured qty)
+        if (nextRole !== ROLE.VILLAGER){
+          const assigned = countAssigned();
+          const cap = state.roles[nextRole] || 0;
+          const current = assigned[nextRole] || 0;
+          const isCurrentlySame = (p.role === nextRole);
+
+          // If we're increasing beyond cap, block
+          if (!isCurrentlySame && current >= cap){
+            sel.value = p.role || ROLE.VILLAGER;
+            announce(`Cannot assign more "${nextRole}" than configured (${cap}).`);
+            return;
+          }
+        }
+
+        p.role = nextRole;
+        renderAssignSidebar();
+      };
+    }
+
+    renderAssignSidebar();
+  }
+
+  function renderAssignSidebar(){
+    const rem = remainingCounts();
+    const box = $("remainingCounts");
+    box.innerHTML = "";
+
+    const items = [
+      ROLE.WEREWOLF, ROLE.WOLFCUB, ROLE.SEER, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.SOBER, ROLE.VILLAGER
+    ].filter(r => (r===ROLE.VILLAGER) || (state.roles[r] != null));
+
+    items.forEach(r => {
+      const el = document.createElement("div");
+      el.className = "kpi";
+      const cap = (r === ROLE.VILLAGER) ? "filler" : String(state.roles[r]);
+      const val = (rem[r] ?? 0);
+      const ok = (r === ROLE.VILLAGER) ? "" : (val < 0 ? "bad" : val === 0 ? "ok" : "warn");
+      el.innerHTML = `<div class="mini">${escapeHtml(r)} (cap: ${cap})</div><b class="${ok}">${val}</b>`;
+      box.appendChild(el);
+    });
+
+    // validation: all non-villager roles must be fully assigned (remaining 0)
+    const bad = Object.keys(state.roles)
+      .filter(r => r !== ROLE.VILLAGER)
+      .some(r => (rem[r] ?? 0) !== 0);
+
+    $("assignValidation").innerHTML = bad
+      ? `<span class="warn">Not ready: some configured roles are not fully assigned (remaining must be 0 for non-villagers).</span>`
+      : `<span class="ok">Ready: all configured roles assigned.</span>`;
+
+    $("startGameBtn").disabled = bad;
+  }
+
+  function autoFillRolesRandom(){
+    const pool = rolePoolFromConfig();
+    // shuffle
+    for (let i=pool.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    state.players.forEach((p, idx) => p.role = pool[idx] || ROLE.VILLAGER);
+    renderAssignRoles();
+  }
+
+  function clearRoles(){
+    state.players.forEach(p => p.role = ROLE.VILLAGER);
+    renderAssignRoles();
+  }
+
+  // ----- Night Panels -----
+  function renderNight(){
+    $("nightNumber").textContent = state.night.number;
+    $("livingCount").textContent = livingPlayers().length;
+
+    state.night.steps = buildNightSteps();
+    state.night.stepIndex = clamp(state.night.stepIndex, 0, Math.max(0, state.night.steps.length-1));
+    const step = state.night.steps[state.night.stepIndex] || "—";
+    $("nightStepLabel").textContent = step.toUpperCase();
+
+    renderPlayersGrid("playersGridNight", { disableDeadClick:false });
+
+    $("nightPrevBtn").disabled = state.night.stepIndex === 0;
+    $("nightNextBtn").disabled = state.night.stepIndex >= state.night.steps.length-1;
+
+    const panel = $("nightPanel");
+    panel.innerHTML = "";
+
+    if (step === "werewolf") renderWerewolfPanel(panel);
+    else if (step === "seer") renderSeerPanel(panel);
+    else if (step === "bodyguard") renderBodyguardPanel(panel);
+    else if (step === "witch") renderWitchPanel(panel);
+    else if (step === "hunter") renderHunterPanel(panel);
+    else panel.innerHTML = `<div class="mini muted">No night steps (no roles configured).</div>`;
+  }
+
+  function renderWerewolfPanel(panel){
+    const canTwoBite = state.day.wolfCubDiedLastDay;
+    const biteCap = canTwoBite ? 2 : 1;
+
+    panel.innerHTML = `
+      <div class="badge">Werewolf</div>
+      <div class="hr"></div>
+      <div class="mini">Pick player(s) to bite: <b>${state.night.bites.length}</b> / <b>${biteCap}</b>
+        ${canTwoBite ? '<span class="warn"> (wolf cub died last day → 2 bites)</span>' : ''}
+      </div>
+      <div id="werewolfPick" class="grid" style="margin-top:10px"></div>
+    `;
+
+    const pick = $("werewolfPick");
+    state.players.forEach(p => {
+      const b = document.createElement("button");
+      b.className = "playerBtn" + (p.alive ? "" : " dead");
+      b.disabled = !p.alive;
+      const chosen = state.night.bites.includes(p.id);
+      b.style.outline = chosen ? "2px solid rgba(255,209,102,.8)" : "";
+      b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${chosen ? "chosen" : ""}</span>`;
+      b.onclick = () => {
+        if (!p.alive) return;
+        const idx = state.night.bites.indexOf(p.id);
+        if (idx >= 0) state.night.bites.splice(idx,1);
+        else {
+          if (state.night.bites.length >= biteCap) return;
+          state.night.bites.push(p.id);
+        }
+        renderNight();
+      };
+      pick.appendChild(b);
+    });
+  }
+
+  function renderSeerPanel(panel){
+    panel.innerHTML = `
+      <div class="badge">Seer</div>
+      <div class="hr"></div>
+      <div class="mini">Pick a player to reveal: <b>${labelPlayer(state.night.seerInspectId) || "—"}</b></div>
+      <div class="hr"></div>
+      <div id="seerPick" class="grid"></div>
+      <div class="hr"></div>
+      <div class="mini">Result: <b>${state.night.seerResult || "—"}</b></div>
+    `;
+    const pick = $("seerPick");
+    state.players.forEach(p => {
+      const b = document.createElement("button");
+      b.className = "playerBtn" + (p.alive ? "" : " dead");
+      b.disabled = !p.alive;
+      const chosen = state.night.seerInspectId === p.id;
+      b.style.outline = chosen ? "2px solid rgba(98,255,167,.8)" : "";
+      b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${chosen ? "inspect" : ""}</span>`;
+      b.onclick = () => {
+        state.night.seerInspectId = p.id;
+        const res = isEvilRole(p.role) ? "Not Villager (Evil)" : "Villager side (Good)";
+        state.night.seerResult = res;
+        renderNight();
+      };
+      pick.appendChild(b);
+    });
+  }
+
+  function renderBodyguardPanel(panel){
+    panel.innerHTML = `
+      <div class="badge">Bodyguard</div>
+      <div class="hr"></div>
+      <div class="mini">Pick a player to protect (blocks wolf bites): <b>${labelPlayer(state.night.bodyguardId) || "—"}</b></div>
+      <div class="hr"></div>
+      <div id="bgPick" class="grid"></div>
+    `;
+    const pick = $("bgPick");
+    state.players.forEach(p => {
+      const b = document.createElement("button");
+      b.className = "playerBtn" + (p.alive ? "" : " dead");
+      b.disabled = !p.alive;
+      const chosen = state.night.bodyguardId === p.id;
+      b.style.outline = chosen ? "2px solid rgba(98,255,167,.8)" : "";
+      b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${chosen ? "protected" : ""}</span>`;
+      b.onclick = () => { state.night.bodyguardId = p.id; renderNight(); };
+      pick.appendChild(b);
+    });
+  }
+
+  function renderWitchPanel(panel){
+    const lifeAvail = !state.night.witchSaveUsed;
+    const deathAvail = !state.night.witchKillUsed;
+
+    const bites = [...state.night.bites];
+    const protectedId = state.night.bodyguardId;
+    const bittenEffective = bites.filter(id => id !== protectedId);
+
+    const bittenMsg = bites.length ? `Bitten: ${bites.map(labelPlayer).join(", ")}` : "Bitten: —";
+    const protMsg = protectedId ? `Bodyguard protected: ${labelPlayer(protectedId)}` : "Bodyguard protected: —";
+
+    panel.innerHTML = `
+      <div class="badge">Witch</div>
+      <div class="hr"></div>
+      <div class="mini">${bittenMsg}</div>
+      <div class="mini">${protMsg}</div>
+      <div class="hr"></div>
+
+      <div class="row">
+        <div class="col">
+          <div class="badge">Life potion</div>
+          <div class="mini muted">Save bitten (after bodyguard). One-time.</div>
+          <div class="hr"></div>
+          <button id="witchSaveBtn" class="good" ${lifeAvail && bittenEffective.length ? "" : "disabled"}>
+            ${state.night.witchSaved ? "Saved (done)" : "Save bitten"}
+          </button>
+          <div class="mini" style="margin-top:8px">Available: <b>${lifeAvail ? "Yes" : "No"}</b></div>
+        </div>
+
+        <div class="col">
+          <div class="badge">Death potion</div>
+          <div class="mini muted">Kill 1 target. Cannot be bodyguarded. One-time.</div>
+          <div class="hr"></div>
+          <div class="mini">Target: <b>${labelPlayer(state.night.witchKillId) || "—"}</b></div>
+          <div class="hr"></div>
+          <div id="witchKillPick" class="grid"></div>
+          <div class="hr"></div>
+          <button id="witchKillConfirmBtn" class="danger" ${deathAvail && state.night.witchKillId ? "" : "disabled"}>
+            Confirm kill
+          </button>
+          <div class="mini" style="margin-top:8px">Available: <b>${deathAvail ? "Yes" : "No"}</b></div>
+        </div>
+      </div>
+    `;
+
+    $("witchSaveBtn").onclick = () => {
+      state.night.witchSaved = true;
+      state.night.witchSaveUsed = true;
+      renderNight();
+    };
+
+    const pick = $("witchKillPick");
+    pick.innerHTML = "";
+    state.players.forEach(p => {
+      const b = document.createElement("button");
+      b.className = "playerBtn" + (p.alive ? "" : " dead");
+      b.disabled = !p.alive || !deathAvail;
+      const chosen = state.night.witchKillId === p.id;
+      b.style.outline = chosen ? "2px solid rgba(255,91,110,.8)" : "";
+      b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${chosen ? "target" : ""}</span>`;
+      b.onclick = () => { state.night.witchKillId = p.id; renderNight(); };
+      pick.appendChild(b);
+    });
+
+    $("witchKillConfirmBtn").onclick = () => {
+      if (!deathAvail || !state.night.witchKillId) return;
+      state.night.witchKillUsed = true;
+      renderNight();
+    };
+  }
+
+  function renderHunterPanel(panel){
+    panel.innerHTML = `
+      <div class="badge">Hunter</div>
+      <div class="hr"></div>
+      <div class="mini">Choose 1 target. If Hunter dies tonight, target dies with him.</div>
+      <div class="hr"></div>
+      <div class="mini">Marked: <b>${labelPlayer(state.night.hunterMarkId) || "—"}</b></div>
+      <div class="hr"></div>
+      <div id="hunterPick" class="grid"></div>
+    `;
+    const pick = $("hunterPick");
+    state.players.forEach(p => {
+      const b = document.createElement("button");
+      b.className = "playerBtn" + (p.alive ? "" : " dead");
+      b.disabled = !p.alive;
+      const chosen = state.night.hunterMarkId === p.id;
+      b.style.outline = chosen ? "2px solid rgba(255,209,102,.8)" : "";
+      b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${chosen ? "marked" : ""}</span>`;
+      b.onclick = () => { state.night.hunterMarkId = p.id; renderNight(); };
+      pick.appendChild(b);
+    });
+  }
+
+  // ----- Announce / Win (AUTO) -----
+  function announce(text){
+    // append to dayAnnouncements area when visible; also store in state
+    state.day.announcements.push(text);
+    if ($("dayAnnouncements")) $("dayAnnouncements").textContent = state.day.announcements.join("\n");
+  }
+
+  function countAliveEvil(){ return state.players.filter(p => p.alive && isEvilRole(p.role)).length; }
+  function countAliveNonEvil(){ return state.players.filter(p => p.alive && !isEvilRole(p.role)).length; }
+
+  function setWinner(type, title, details){
+    state.winner = {type, title, details};
+    $("winnerTitle").textContent = title;
+    $("winnerDetails").textContent = details.join("\n");
+    showScreen(7);
+    return state.winner;
+  }
+
+  function checkWinAuto(context = { kind: "generic" }){
+    // Sober special: ONLY if voted and killed
+    if (context.kind === "voteKill" && context.playerId){
+      const p = state.players.find(x => x.id === context.playerId);
+      if (p && p.role === ROLE.SOBER && !p.alive){
+        return setWinner("Sober", "Sober wins", [`Sober (${labelPlayer(p.id)}) was voted and killed.`]);
+      }
+    }
+
+    const aliveEvil = countAliveEvil();
+    const aliveNonEvil = countAliveNonEvil();
+
+    if (aliveEvil > 0 && aliveEvil === aliveNonEvil){
+      return setWinner("Wolves", "Wolves win", [
+        `Alive wolves: ${aliveEvil}`,
+        `Alive non-wolves: ${aliveNonEvil}`,
+        `Rule: wolves == non-wolves → wolves win`
+      ]);
+    }
+    if (aliveEvil === 0){
+      return setWinner("Villagers", "Villagers win", [`All wolves are dead.`]);
+    }
+    return null;
+  }
+
+  // ----- Resolve night -> day -----
+  function appendNightLog(line){
+    state.day.lastNightLog.push(line);
+    $("nightLog").textContent = state.day.lastNightLog.join("\n");
+  }
+
+  function resolveNight(){
+    state.day.lastNightLog = [];
+    state.day.announcements = [];
+
+    const bites = [...state.night.bites];
+    const bg = state.night.bodyguardId;
+
+    appendNightLog(`Wolf bit ${bites.length ? bites.map(labelPlayer).join(", ") : "—"}`);
+    if (bg) appendNightLog(`Body guard protected ${labelPlayer(bg)}`);
+    if (state.night.seerInspectId) appendNightLog(`Seer inspect ${labelPlayer(state.night.seerInspectId)} => ${state.night.seerResult || "—"}`);
+
+    // Effective bites after bodyguard
+    let bittenEffective = bites.filter(id => id !== bg);
+
+    // Witch save (saves all bittenEffective here)
+    if (state.night.witchSaved && bittenEffective.length){
+      appendNightLog(`Witch protected ${bittenEffective.map(labelPlayer).join(", ")}`);
+      bittenEffective = [];
+    }
+
+    // Witch kill (cannot be bodyguarded)
+    const witchKill = (state.night.witchKillUsed && state.night.witchKillId) ? state.night.witchKillId : null;
+    if (witchKill) appendNightLog(`Witch killed ${labelPlayer(witchKill)}`);
+
+    // Death set
+    const deathSet = new Set();
+    bittenEffective.forEach(id => deathSet.add(id));
+    if (witchKill) deathSet.add(witchKill);
+
+    // Hunter chain
+    const hunter = state.players.find(p => p.role === ROLE.HUNTER);
+    const hunterDied = hunter && deathSet.has(hunter.id);
+    state.night.hunterDied = !!hunterDied;
+    if (hunterDied && state.night.hunterMarkId){
+      deathSet.add(state.night.hunterMarkId);
+      appendNightLog(`Hunter died; took ${labelPlayer(state.night.hunterMarkId)} with him`);
+    }
+
+    const nightDeaths = [...deathSet].filter(id => {
+      const p = state.players.find(x => x.id === id);
+      return p && p.alive;
+    });
+
+    nightDeaths.forEach(id => {
+      const p = state.players.find(x => x.id === id);
+      if (p) p.alive = false;
+    });
+
+    state.day.dayDeaths = nightDeaths;
+
+    if (nightDeaths.length){
+      announce(`${nightDeaths.map(labelPlayer).join(", ")} died.`);
+    } else {
+      announce(`No one died.`);
+    }
+
+    // AUTO win check after applying deaths
+    checkWinAuto();
+  }
+
+  // ----- Voting / Manual kill -----
+  function killPlayer(id, reason){
+    const p = state.players.find(x => x.id === id);
+    if (!p || !p.alive) return false;
+    p.alive = false;
+
+    // wolf cub bonus: only if died during DAY (vote/manual)
+    if (reason === "vote" || reason === "manual"){
+      state.day.wolfCubDiedLastDay = (p.role === ROLE.WOLFCUB);
+    }
+    return true;
+  }
+
+  // ----- Vote Screen -----
+  function renderVote(){
+    renderPlayersGrid("playersGridVote", {
+      disableDeadClick: true,
+      onClick: (p) => {
+        state.vote.selectedId = p.id;
+        $("voteSelectedLabel").textContent = labelPlayer(p.id);
+        renderVote();
+      }
+    });
+
+    // highlight selection
+    for (const btn of $("playersGridVote").querySelectorAll("button")){
+      const txt = btn.querySelector(".name")?.textContent || "";
+      const id = parseInt(txt.split(".")[0],10);
+      if (id === state.vote.selectedId){
+        btn.style.outline = "2px solid rgba(255,209,102,.85)";
+      }
+    }
+
+    $("voteTimer").textContent = fmtTime(state.vote.timer);
+  }
+
+  // ----- Manual Screen -----
+  function renderManual(){
+    renderPlayersGrid("playersGridManual", {
+      disableDeadClick:false,
+      onClick: (p) => {
+        // toggle alive/dead
+        const wasAlive = p.alive;
+        p.alive = !p.alive;
+
+        // day-kill logic for wolf cub bonus if we killed them manually
+        if (wasAlive && !p.alive) state.day.wolfCubDiedLastDay = (p.role === ROLE.WOLFCUB);
+
+        // AUTO win check whenever admin changes state
+        checkWinAuto();
+
+        renderManual();
+        // also refresh night UI if they go back
+      }
+    });
+  }
+
+  // ----- Timers -----
+  function startDayTimer(){
+    if (state.timers.dayInterval) return;
+    state.timers.dayInterval = setInterval(() => {
+      state.timers.day++;
+      $("dayTimer").textContent = fmtTime(state.timers.day);
+    }, 1000);
+  }
+  function stopDayTimer(){
+    if (state.timers.dayInterval){
+      clearInterval(state.timers.dayInterval);
+      state.timers.dayInterval = null;
+    }
+  }
+  function startVoteTimer(){
+    if (state.vote.interval) return;
+    state.vote.interval = setInterval(() => {
+      state.vote.timer++;
+      $("voteTimer").textContent = fmtTime(state.vote.timer);
+    }, 1000);
+  }
+  function stopVoteTimer(){
+    if (state.vote.interval){
+      clearInterval(state.vote.interval);
+      state.vote.interval = null;
+    }
+  }
+
+  // ----- Flow -----
+  function startGameFromAssignedRoles(){
+    // hard safety: ensure everyone has a role (default villager)
+    state.players.forEach(p => { if (!p.role) p.role = ROLE.VILLAGER; });
+
+    state.gameStarted = true;
+    state.winner = null;
+
+    // reset all alive
+    state.players.forEach(p => p.alive = true);
+
+    // reset logs/timers
+    state.day.lastNightLog = [];
+    state.day.announcements = [];
+    state.day.wolfCubDiedLastDay = false;
+
+    stopDayTimer(); state.timers.day = 0; $("dayTimer").textContent = "00:00";
+    stopVoteTimer(); state.vote.timer = 0; $("voteTimer").textContent = "00:00";
+
+    // reset night
+    state.night.number = 1;
+    resetNightState({keepPotions:false});
+
+    renderNight();
+    showScreen(3);
+  }
+
+  function goToNextNight(){
+    // Start next night clean, steps reset to wolf (bug fix)
+    state.night.number++;
+    state.day.lastNightLog = [];
+    state.day.announcements = [];
+    $("nightLog").textContent = "";
+    $("dayAnnouncements").textContent = "";
+
+    // Keep potion usage across nights (typical), but your spec didn't say;
+    // If you want per-night reset, set keepPotions=false.
+    resetNightState({keepPotions:true});
+
+    renderNight();
+    showScreen(3);
+  }
+
+  // ----- Init -----
+  function init(){
+    // init players
+    state.playerCount = parseInt($("playerCountInput").value,10) || 12;
+    state.players = Array.from({length: state.playerCount}, (_,i)=>({id:i+1,name:`Player ${i+1}`,alive:true,role:ROLE.VILLAGER}));
+    renderPlayersTextarea();
+    renderRoleTables();
+    updateQuickStatus();
+
+    // Screen 1
+    $("applyPlayerCountBtn").onclick = () => {
+      state.playerCount = clamp(parseInt($("playerCountInput").value,10) || 12, 3, 30);
+      applyPlayersFromTextarea();
+      state.players = state.players.slice(0, state.playerCount);
+      while (state.players.length < state.playerCount){
+        const i = state.players.length;
+        state.players.push({id:i+1,name:`Player ${i+1}`,alive:true,role:ROLE.VILLAGER});
+      }
+      state.players.forEach((p, i) => p.id = i+1);
+      renderPlayersTextarea();
+
+      while (roleTotal() > state.playerCount){
+        if (state.roles[ROLE.VILLAGER] > 0) state.roles[ROLE.VILLAGER]--;
+        else break;
+      }
+      renderRoleTables();
+      updateQuickStatus();
+    };
+
+    $("toRoleConfigBtn").onclick = () => {
+      applyPlayersFromTextarea();
+      renderPlayersTextarea();
+      renderRoleTables();
+      updateQuickStatus();
+      showScreen(2);
+    };
+
+    $("playBtn").onclick = () => {
+      applyPlayersFromTextarea();
+      if (roleTotal() > state.playerCount){
+        alert("Role total exceeds player count.");
+        return;
+      }
+      // go to manual assign screen first (required flow)
+      showScreen("s25");
+      renderAssignRoles();
+    };
+
+    // Screen 2
+    $("backToS1Btn").onclick = () => showScreen(1);
+    $("toAssignRolesBtn").onclick = () => {
+      applyPlayersFromTextarea();
+      if (roleTotal() > state.playerCount){
+        alert("Role total exceeds player count.");
+        return;
+      }
+      showScreen("s25");
+      renderAssignRoles();
+    };
+
+    // Screen 2.5
+    $("backToRoleConfigBtn").onclick = () => showScreen(2);
+    $("autoFillRolesBtn").onclick = () => autoFillRolesRandom();
+    $("clearRolesBtn").onclick = () => clearRoles();
+    $("startGameBtn").onclick = () => startGameFromAssignedRoles();
+
+    // Night navigation
+    $("nightPrevBtn").onclick = () => { state.night.stepIndex--; renderNight(); };
+    $("nightNextBtn").onclick = () => { state.night.stepIndex++; renderNight(); };
+
+    $("toDayBtn").onclick = () => {
+      resolveNight();
+      // Show day (if winner was found, we already switched to Screen 7)
+      if (state.winner) return;
+      $("nightLog").textContent = state.day.lastNightLog.join("\n");
+      $("dayAnnouncements").textContent = state.day.announcements.join("\n");
+      showScreen(4);
+    };
+
+    $("toManualBtn").onclick = () => {
+      renderManual();
+      showScreen(6);
+    };
+
+    // Day screen
+    $("toVoteBtn").onclick = () => {
+      state.vote.selectedId = null;
+      stopVoteTimer(); state.vote.timer = 0;
+      $("voteSelectedLabel").textContent = "—";
+      renderVote();
+      showScreen(5);
+    };
+
+    $("toNextNightBtn").onclick = () => {
+      // Going back to night ALWAYS resets to wolf step (bug fix)
+      goToNextNight();
+    };
+
+    // Vote screen
+    $("startVoteTimerBtn").onclick = startVoteTimer;
+    $("stopVoteTimerBtn").onclick = stopVoteTimer;
+    $("resetVoteTimerBtn").onclick = () => { state.vote.timer = 0; $("voteTimer").textContent = fmtTime(0); };
+
+    $("killByVoteBtn").onclick = () => {
+      if (!state.vote.selectedId) return alert("Pick a player first.");
+      const ok = killPlayer(state.vote.selectedId, "vote");
+      if (!ok) return;
+
+      state.day.announcements = [];
+      announce(`${labelPlayer(state.vote.selectedId)} was voted and killed.`);
+
+      // AUTO win (includes sober rule)
+      checkWinAuto({ kind: "voteKill", playerId: state.vote.selectedId });
+
+      if (state.winner) return;
+      showScreen(4);
+    };
+
+    $("spareByVoteBtn").onclick = () => {
+      state.day.announcements = [];
+      announce(`${state.vote.selectedId ? labelPlayer(state.vote.selectedId) : "Selected player"} was spared.`);
+      // no win check on spare (optional), but still can happen if already reached condition
+      checkWinAuto();
+      if (state.winner) return;
+      showScreen(4);
+    };
+
+    $("backToDayBtn").onclick = () => showScreen(4);
+
+    // Day timers
+    $("startDayTimerBtn").onclick = startDayTimer;
+    $("stopDayTimerBtn").onclick = stopDayTimer;
+    $("resetDayTimerBtn").onclick = () => { state.timers.day = 0; $("dayTimer").textContent = fmtTime(0); };
+
+    // Manual screen back
+    $("backFromManualBtn").onclick = () => {
+      // go back to night (same night), step reset to wolf to avoid confusion
+      state.night.stepIndex = 0;
+      renderNight();
+      showScreen(3);
+    };
+
+    // Winner screen
+    $("restartBtn").onclick = () => {
+      state.players.forEach(p => p.alive = true);
+      state.day.lastNightLog = [];
+      state.day.announcements = [];
+      state.day.wolfCubDiedLastDay = false;
+
+      stopDayTimer(); state.timers.day = 0; $("dayTimer").textContent = "00:00";
+      stopVoteTimer(); state.vote.timer = 0; $("voteTimer").textContent = "00:00";
+
+      state.night.number = 1;
+      resetNightState({keepPotions:false});
+      state.winner = null;
+
+      renderNight();
+      showScreen(3);
+    };
+
+    $("backToDayFromWinBtn").onclick = () => {
+      state.winner = null;
+      showScreen(4);
+    };
+
+    // Default role assignment = villager
+    state.players.forEach(p => p.role = ROLE.VILLAGER);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
