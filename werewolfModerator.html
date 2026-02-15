@@ -101,7 +101,8 @@
       opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:40;padding:16px
     }
     .modal.show{opacity:1;pointer-events:auto}
-    .modal .card{max-width:320px;width:100%}
+    .modal .card{max-width:320px;width:100%;max-height:80vh;display:flex;flex-direction:column}
+    .modalBody{overflow:auto;max-height:60vh}
     .modalActions{display:flex;gap:8px;justify-content:flex-end}
     .modal .card .confirmBtn{
       background:#f2f4ff;color:#0b1020;border:none;padding:10px 12px;border-radius:12px;
@@ -120,8 +121,11 @@
     .qty{display:flex;align-items:center;justify-content:flex-end;gap:8px}
     .qty button{padding:6px 10px;border-radius:10px}
     .log{white-space:pre-wrap;background:#0a1026;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px 12px;min-height:120px;max-height:320px;overflow:auto}
-    .ok{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    .ok{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)} .other{color:var(--warn)}
     .roleRow{display:grid;grid-template-columns: 1.2fr 1fr; gap:10px; align-items:center; padding:4px 8px; border:1px solid rgba(255,255,255,.08); border-radius:14px; background:rgba(255,255,255,.04)}
+    .roleSummaryCols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .summaryTitle{font-weight:700;margin-bottom:6px}
+    .summaryList{white-space:pre-wrap}
     .roleRow > div{justify-self:start;text-align:left}
     .roleRow > div:last-child{justify-self:end;text-align:right}
     .roleCounts{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
@@ -165,13 +169,8 @@
 
       <div class="col">
         <div id="resumeCard" class="card" style="margin-top:12px;display:none">
-          <div class="badge">Saved game</div>
-          <div class="hr"></div>
-          <div class="mini">A saved game was found.</div>
-          <div class="hr"></div>
           <div class="row">
-            <button id="resumeBtn" class="good">Resume</button>
-            <button id="resetSavedBtn" class="secondary">Reset saved game</button>
+            <button id="resumeBtn" class="good">Resume last game</button>
           </div>
         </div>
       </div>
@@ -201,6 +200,10 @@
         </div>
       </div>
 
+      <div class="hr"></div>
+      <div class="row">
+        <button id="roleSummaryBtn" class="good menuWide">Role Summary</button>
+      </div>
       <div class="hr"></div>
       <div class="inlineHalf">
         <button id="backToS1Btn" class="secondary">Back</button>
@@ -405,7 +408,9 @@
   <div class="card">
     <div id="modalTitle" class="mini">Notice</div>
     <div class="hr"></div>
-    <div id="modalMessage" class="mini"></div>
+    <div class="modalBody">
+      <div id="modalMessage" class="mini"></div>
+    </div>
     <div class="hr"></div>
     <div class="modalActions">
       <button id="modalCancelBtn" class="cancelBtn">Cancel</button>
@@ -538,6 +543,7 @@
       announcements: [],
       lastNightLog: [],
       dayDeaths: [],
+      lastNightDeaths: [],
       wolfCubDiedLastDay: false,
       pendingHunterMarkId: null,
       lynchCount: 0,
@@ -779,7 +785,7 @@
     if (!saveSuppressed) saveState();
   }
 
-  function showModal({title="Notice", message="", confirmText="OK", cancelText=null, bigMessage=false} = {}){
+  function showModal({title="Notice", message="", confirmText="OK", cancelText=null, bigMessage=false, html=false} = {}){
     return new Promise(resolve => {
       const modal = $("appModal");
       const overlay = $("modalOverlay");
@@ -789,7 +795,8 @@
       const cancelBtn = $("modalCancelBtn");
 
       titleEl.textContent = title;
-      msgEl.textContent = message;
+      if (html) msgEl.innerHTML = message;
+      else msgEl.textContent = message;
       msgEl.classList.toggle("bigMsg", !!bigMessage);
       okBtn.textContent = confirmText;
       if (cancelText){
@@ -819,6 +826,7 @@
 
   const alertModal = (message, title="Notice") => showModal({title, message, confirmText:"OK"});
   const confirmModal = (message, title="Confirm") => showModal({title, message, confirmText:"Yes", cancelText:"No"});
+  const bigModal = (message, title="") => showModal({title, message, confirmText:"OK", bigMessage:true});
 
   function applySnapshot(snap){
     if (!snap) return;
@@ -985,8 +993,14 @@
     const p = state.players.find(x => x.id === id);
     return p ? `${p.name} (${getDisplayRole(p)})` : "";
   }
+  function getOutOfUsageWarning(margin="margin-top:6px"){
+    return `<div class="mini warn" style="${margin}">Out of uses.</div>`;
+  }
   function isRoleAlive(role){
     return state.players.some(p => p.alive && p.role === role);
+  }
+  function isWolfRole(role){
+    return isEvilRole(role);
   }
   function aliveWolves(){
     return state.players.some(p => p.alive && (p.role === ROLE.WEREWOLF || p.role === ROLE.WOLFCUB || p.role === ROLE.SORCERESS || p.role === ROLE.DIRE_WOLF));
@@ -1104,10 +1118,11 @@
       tr.dataset.role = role;
       if ((state.roles[role] ?? 0) === 0) tr.classList.add("disabledRow");
       const evilClass = roleMeta[role]?.side === SIDE.EVIL ? " bad" : "";
+      const otherClass = roleMeta[role]?.side === SIDE.OTHER ? " other" : "";
       tr.innerHTML = `
         <td style="width:55%">
-          <div class="${evilClass}"><b>${role}</b></div>
-          <div class="mini${evilClass}">${roleMeta[role].note}</div>
+          <div class="${evilClass}${otherClass}"><b>${role}</b></div>
+          <div class="mini${evilClass}${otherClass}">${roleMeta[role].note}</div>
         </td>
         <td style="width:45%;text-align:right">
           <div class="qty">
@@ -1313,7 +1328,7 @@
         : "Wolves, wake up. Wolves select players to bite.",
       sorceress: "Sorceress, wake up. Sorceress selects players to check if they are Seer.",
       troublemaker: (state.day.troublemakerLastUseNight != null && state.day.troublemakerLastUseNight < state.night.number)
-        ? "Troublemaker, wake up. Do you want to activate 2 lynches for the next day? (no usage left)"
+        ? "Troublemaker, wake up. Do you want to activate 2 lynches for the next day? (no uses remaining)"
         : "Troublemaker, wake up. Do you want to activate 2 lynches for the next day?",
       dire_wolf: "Dire Wolf, wake up. Dire Wolf chooses a player. If that player dies, Dire Wolf dies with them.",
       doppelganger: (state.night.number > 1)
@@ -1328,15 +1343,27 @@
       })(),
       seer: "Seer, wake up. Seer selects players to reveal.",
       couple: "Couple, wake up. You may briefly discuss.",
-      apprentice_seer: isRoleAlive(ROLE.SEER)
-        ? "Apprentice Seer, wake up. Apprentice Seer selects players to reveal (secretly tell them that the Seer has not died yet)."
-        : "Apprentice Seer, wake up. Apprentice Seer selects players to reveal.",
+      apprentice_seer: (() => {
+        const seerAlive = isRoleAlive(ROLE.SEER);
+        if (seerAlive){
+          return "Apprentice Seer, wake up. Apprentice Seer selects players to reveal (secretly tell them that the Seer has not died yet).";
+        }
+        const seer = state.players.find(p => p.role === ROLE.SEER);
+        const seerDiedLastNight = !!(seer && state.day.lastNightDeaths && state.day.lastNightDeaths.includes(seer.id));
+        if (seerDiedLastNight){
+          const appr = state.players.find(p => p.role === ROLE.APPRENTICE_SEER);
+          const apprName = appr ? appr.name : "Apprentice Seer";
+          const seerName = seer ? seer.name : "Seer";
+          return `Apprentice Seer, wake up (secretly point at ${apprName} because ${seerName} died last night). Apprentice Seer selects players to reveal.`;
+        }
+        return "Apprentice Seer, wake up. Apprentice Seer selects players to reveal.";
+      })(),
       pi: (state.day.piLastUseNight != null && state.day.piLastUseNight < state.night.number)
-        ? "PI, wake up. PI selects players to reveal. (no usage left)"
+        ? "PI, wake up. PI selects players to reveal. (no uses remaining)"
         : "PI, wake up. PI selects players to reveal.",
       spellcaster: "Spellcaster, wake up. Spellcaster selects players to mute them the next day.",
       priest: (state.day.priestLastUseNight != null && state.day.priestLastUseNight < state.night.number)
-        ? "Priest, wake up. Priest selects players to protect them from wolf bites at night. (no usage left)"
+        ? "Priest, wake up. Priest selects players to protect them from wolf bites at night. (no uses remaining)"
         : "Priest, wake up. Priest selects players to protect them from wolf bites at night.",
       bodyguard: "Bodyguard, wake up. Bodyguard selects players to protect tonight.",
       witch: (() => {
@@ -1344,11 +1371,11 @@
         const bittenNames = effectiveBites.length ? effectiveBites.map(labelPlayer).join(", ") : "";
         const saveUsedBefore = (state.day.witchSaveLastUseNight != null && state.day.witchSaveLastUseNight < state.night.number);
         const healNote = saveUsedBefore
-          ? `(no usage left)`
+          ? `(no uses remaining)`
           : (effectiveBites.length
               ? `(point at ${bittenNames})`
               : `(secretly tell them no players are dying)`);
-        const killNote = (state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number) ? " (no usage left)" : "";
+        const killNote = (state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number) ? " (no uses remaining)" : "";
         return `Witch, wake up.\nTonight, these players are about to die. ${healNote} Do you want to heal them?\nWhich players do you want to kill?${killNote}`;
       })(),
       hunter: "Hunter, wake up. Hunter selects players to mark as targets.",
@@ -1380,7 +1407,7 @@
         const a = state.players.find(x => x.id === aId);
         const b = state.players.find(x => x.id === bId);
         if (!a || !b || !a.alive || !b.alive) stepLabel += " (DEAD)";
-      } else if (step !== "doppelganger") {
+      } else {
         const roleMap = {
           doppelganger: ROLE.DOPPELGANGER,
           werewolf: ROLE.WEREWOLF,
@@ -1571,13 +1598,13 @@
     const alive = isRoleAlive(ROLE.DOPPELGANGER);
     const targetId = state.day.doppelgangerTargetId;
     const canChoose = alive && state.night.number === 1;
-    const infoRole = state.day.doppelgangerRole || state.day.doppelgangerPendingRole;
     const targetPlayer = state.players.find(p => p.id === state.day.doppelgangerTargetId);
     const targetAlive = !!(targetPlayer && targetPlayer.alive);
+    const infoRole = alive ? (targetPlayer ? getDisplayRole(targetPlayer) : (state.day.doppelgangerRole || state.day.doppelgangerPendingRole)) : null;
     const statusLabel = targetPlayer ? (targetAlive ? "ALIVE" : "DEAD") : null;
     panel.innerHTML = `
       <div>
-        <div class="mini">Chosen role: <b>${infoRole ? escapeHtml(infoRole) : "—"}</b>${statusLabel ? ` <span class="mini">and ${statusLabel}</span>` : ""}</div>
+        <div class="mini">Chosen role: <b>${infoRole ? escapeHtml(infoRole) : "—"}</b>${statusLabel ? ` <span class="mini">are ${statusLabel}</span>` : ""}</div>
         ${infoRole ? `<button id="doppelShowRoleBtn" class="good menuWide" style="margin-top:8px" ${targetAlive ? "disabled" : ""}>Show role to player</button>` : ""}
         <div class="hr"></div>
         ${(state.night.number === 1) ? selectionSummary(targetId ? [targetId] : [], 1) : ""}
@@ -1751,7 +1778,7 @@
         <button id="troublemakerToggleBtn" class="good menuWide" ${(!tmAlive || pending) ? "disabled" : ""}>
           Enable for next day
         </button>
-        ${showUsedWarn ? '<div class="mini warn" style="margin-top:6px">Already used once.</div>' : ''}
+        ${showUsedWarn ? getOutOfUsageWarning() : ''}
       </div>
     `;
     const btn = $("troublemakerToggleBtn");
@@ -1811,7 +1838,7 @@
     const uses = state.day.piUses || 0;
     panel.innerHTML = `
       <div class="${piAlive ? "" : "disabledSection"}">
-        ${(state.day.piLastUseNight != null && state.day.piLastUseNight < state.night.number) ? '<div class="mini warn" style="margin-bottom:6px">Already used once. Second use will be warned.</div>' : ''}
+        ${(state.day.piLastUseNight != null && state.day.piLastUseNight < state.night.number) ? getOutOfUsageWarning("margin-bottom:6px") : ''}
         <div class="mini">Result: <b>${state.night.piResult || "—"}</b></div>
         <div class="hr"></div>
         ${selectionSummary(state.night.piSelectedIds, 3)}
@@ -1848,7 +1875,7 @@
           }
           const anyWerewolf = state.night.piSelectedIds.some(id => {
             const p = state.players.find(x => x.id === id);
-            return p && p.role === ROLE.WEREWOLF;
+            return p && isWolfRole(p.role);
           });
           state.night.piResult = anyWerewolf ? "At least one is a Werewolf" : "No Werewolf among them";
           state.night.piChecked = true;
@@ -1896,7 +1923,7 @@
     const warned = state.day.priestLastUseNight && state.day.priestLastUseNight < state.night.number;
     panel.innerHTML = `
       <div class="${alive ? "" : "disabledSection"}">
-        ${(warned && state.night.number > 1) ? '<div class="mini warn" style="margin-bottom:6px">Already used once.</div>' : ''}
+        ${(warned && state.night.number > 1) ? getOutOfUsageWarning("margin-bottom:6px") : ''}
         ${selectionSummary(state.night.priestProtectId ? [state.night.priestProtectId] : [], 1)}
         <div id="priestPick" class="grid"></div>
         ${!alive ? '<div class="mini warn" style="margin-top:6px">Priest is dead.</div>' : ''}
@@ -1941,27 +1968,28 @@
     const bites = [...state.night.bites];
     const protectedId = state.night.bodyguardId;
     const bittenEffective = bites.filter(id => id !== protectedId);
-    const lifeDisabled = !witchAlive || (!bittenEffective.length && !state.night.witchSaveId);
-    const deathAvailableNow = witchAlive && (deathAvail || state.night.witchKillId !== null || state.day.witchKillLastUseNight === state.night.number);
-    const deathDisabled = !deathAvailableNow;
+    const lifeDisabled = !witchAlive;
+    const deathAvailableNow = witchAlive;
+    const deathOutOfUse = (!deathAvail && state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number);
+    const deathDisabled = !witchAlive || deathOutOfUse;
 
     const bittenMsg = bites.length ? `Bitten: ${bites.map(labelPlayer).join(", ")}` : "Bitten: —";
     const protMsg = protectedId ? `Bodyguard protected: ${labelPlayer(protectedId)}` : "Bodyguard protected: —";
 
     panel.innerHTML = `
-      <div class="${lifeDisabled ? "disabledSection" : ""}" style="padding:6px 0">
+      <div class="${(!witchAlive ? "disabledSection" : "")}" style="padding:6px 0">
         <div class="badge">Live potion${(state.day.witchSaveLastUseNight != null && state.day.witchSaveLastUseNight < state.night.number) ? " (used)" : ""}</div>
         <div class="mini" style="margin-top:6px;font-size:13px">${bittenMsg}</div>
         <div class="mini" style="margin-top:6px;font-size:13px">${protMsg}</div>
-        ${(!lifeAvail && state.day.witchSaveLastUseNight != null && state.day.witchSaveLastUseNight < state.night.number && !state.night.witchSaveId) ? '<div class="mini warn" style="margin-top:6px">Save already used.</div>' : ''}
+        ${(!lifeAvail && state.day.witchSaveLastUseNight != null && state.day.witchSaveLastUseNight < state.night.number && !state.night.witchSaveId) ? getOutOfUsageWarning("margin-top:6px") : ''}
         <div id="witchSavePick" class="grid" style="margin-top:10px"></div>
       </div>
 
       <div class="hr"></div>
 
-      <div class="${deathDisabled ? "disabledSection" : ""}" style="padding:6px 0">
+      <div class="${(!witchAlive ? "disabledSection" : "")}" style="padding:6px 0">
         <div class="badge">Death potion${(state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number) ? " (used)" : ""}</div>
-        ${(!deathAvail && state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number && !state.night.witchKillId) ? '<div class="mini warn" style="margin-top:6px">Kill already used.</div>' : ''}
+        ${(!deathAvail && state.day.witchKillLastUseNight != null && state.day.witchKillLastUseNight < state.night.number && !state.night.witchKillId) ? getOutOfUsageWarning("margin-top:6px") : ''}
         <div style="margin-top:8px">${selectionSummary(state.night.witchKillId ? [state.night.witchKillId] : [], 1)}</div>
         <div id="witchKillPick" class="grid" style="margin-top:8px"></div>
       </div>
@@ -1980,14 +2008,14 @@
         btn.textContent = chosen ? `Undo Save ${labelPlayer(id)}` : `Save ${labelPlayer(id)}`;
         btn.disabled = !witchAlive;
         btn.onclick = async () => {
-          if (lifeDisabled) return;
+          if (!witchAlive) return;
           if (state.night.witchSaveId === id){
             state.night.witchSaveId = null;
             state.night.witchSaved = false;
             renderNight();
             return;
           }
-          if (!lifeAvail && state.day.witchSaveLastUseNight !== state.night.number){
+          if (!lifeAvail && state.day.witchSaveLastUseNight != null && state.day.witchSaveLastUseNight < state.night.number){
             const ok = await confirmModal("Witch save was already used in a previous night. Use again?");
             if (!ok) return;
           }
@@ -2013,17 +2041,17 @@
       b.className = "playerBtn" + (p.alive ? "" : " dead");
       if (isEvilRole(p.role)) b.classList.add("evil");
       if (p.role === ROLE.WITCH) b.classList.add("roleHighlight");
-      b.disabled = !p.alive || !deathAvailableNow;
+      b.disabled = !p.alive || !witchAlive;
       const chosen = state.night.witchKillId === p.id;
       b.style.outline = chosen ? "2px solid rgba(255,91,110,.8)" : "";
       const roleLabel = escapeHtml(getDisplayRole(p));
       b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${roleLabel}${chosen ? " • target" : ""}</span>`;
       b.onclick = async () => {
-        if (!deathAvailableNow) return;
+        if (!witchAlive) return;
         if (state.night.witchKillId === p.id){
           state.night.witchKillId = null;
         } else {
-          if (!deathAvail && state.day.witchKillLastUseNight !== state.night.number){
+          if (deathOutOfUse){
             const ok = await confirmModal("Kill potion already used in a previous night. Use again?");
             if (!ok) return;
           }
@@ -2040,8 +2068,6 @@
   function renderHunterPanel(panel){
     const hunterAlive = isRoleAlive(ROLE.HUNTER);
     panel.innerHTML = `
-      <div class="mini">Choose 1 target. If Hunter dies tonight, target dies with him.</div>
-      <div class="hr"></div>
       ${selectionSummary(state.night.hunterMarkId ? [state.night.hunterMarkId] : [], 1)}
       <div id="hunterPick" class="grid"></div>
       </div>
@@ -2203,11 +2229,11 @@
     const bg = state.night.bodyguardId;
     state.day.lastBodyguardId = bg || null;
 
-    appendNightLog(`Wolf bit ${bites.length ? bites.map(labelPlayerWithRole).join(", ") : "no one"}`);
-    if (bg) appendNightLog(`Body guard protected ${labelPlayerWithRole(bg)}`);
-    if (state.night.sorceressInspectId) appendNightLog(`Sorceress inspect ${labelPlayerWithRole(state.night.sorceressInspectId)} => ${state.night.sorceressResult || "—"}`);
-    if (state.night.seerInspectId) appendNightLog(`Seer inspect ${labelPlayerWithRole(state.night.seerInspectId)} => ${state.night.seerResult || "—"}`);
-    if (state.night.apprenticeInspectId) appendNightLog(`Apprentice inspect ${labelPlayerWithRole(state.night.apprenticeInspectId)} => ${state.night.apprenticeResult || "—"}`);
+    appendNightLog(`Wolves bit ${bites.length ? bites.map(labelPlayerWithRole).join(", ") : "no one"}`);
+    if (bg) appendNightLog(`Bodyguard protected ${labelPlayerWithRole(bg)}`);
+    if (state.night.sorceressInspectId) appendNightLog(`Sorceress inspected ${labelPlayerWithRole(state.night.sorceressInspectId)} => ${state.night.sorceressResult || "—"}`);
+    if (state.night.seerInspectId) appendNightLog(`Seer inspected ${labelPlayerWithRole(state.night.seerInspectId)} => ${state.night.seerResult || "—"}`);
+    if (state.night.apprenticeInspectId) appendNightLog(`Apprentice Seer inspected ${labelPlayerWithRole(state.night.apprenticeInspectId)} => ${state.night.apprenticeResult || "—"}`);
     if (state.night.spellcasterTargetId) appendNightLog(`Spellcaster silenced ${labelPlayerWithRole(state.night.spellcasterTargetId)} for today`);
     if (state.night.piChecked){
       const list = state.night.piSelectedIds.map(labelPlayerWithRole).join(", ") || "—";
@@ -2216,9 +2242,6 @@
     }
     if (state.night.number === 1 && state.roles[ROLE.CUPID] > 0 && state.night.cupidSelectedIds.length === 2){
       appendNightLog(`Cupid linked ${state.night.cupidSelectedIds.map(labelPlayerWithRole).join(", ")}.`);
-    }
-    if (state.day.coupleIds && state.day.coupleIds.length === 2 && state.night.number > 1){
-      appendNightLog(`Couple woke and discussed.`);
     }
     if (state.night.number === 1 && state.roles[ROLE.DOPPELGANGER] > 0 && state.day.doppelgangerTargetId){
       appendNightLog(`Doppelganger chose ${labelPlayerWithRole(state.day.doppelgangerTargetId)}.`);
@@ -2376,6 +2399,7 @@
     });
 
     state.day.dayDeaths = nightDeaths;
+    state.day.lastNightDeaths = nightDeaths;
     // wolf cub bonus for NEXT night only if wolf cub died tonight
     state.day.wolfCubDiedLastDay = nightDeaths.some(id => {
       const p = state.players.find(x => x.id === id);
@@ -2657,15 +2681,13 @@
       showScreen(1);
       saveSuppressed = false;
       $("resumeCard").style.display = "block";
+      const savedCount = (saved.snapshot?.players || []).length || saved.snapshot?.playerCount || 0;
+      $("resumeBtn").textContent = `Resume last game (${savedCount} people)`;
       $("resumeBtn").onclick = () => {
         const latest = loadSavedState();
         if (!latest) return;
         applySnapshot(latest.snapshot);
         restoreUIForScreen(latest.activeScreen);
-      };
-      $("resetSavedBtn").onclick = () => {
-        clearSavedState();
-        resetToDefaults();
       };
     }
     saveSuppressed = false;
@@ -2790,6 +2812,32 @@
     $("autoFillRolesBtn").onclick = () => autoFillRolesRandom();
     $("clearRolesBtn").onclick = () => clearRoles();
     $("startGameBtn").onclick = () => startGameFromAssignedRoles();
+    $("roleSummaryBtn").onclick = async () => {
+      const fmtList = (roles) => roles
+        .filter(r => (state.roles[r] || 0) > 0)
+        .map(r => `- ${state.roles[r]} ${r}`)
+        .join("\n") || "-";
+
+      const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF];
+      const goodRoles = Object.keys(state.roles).filter(r => roleMeta[r]?.side === SIDE.GOOD);
+      const otherRoles = Object.keys(state.roles).filter(r => roleMeta[r]?.side === SIDE.OTHER);
+
+      const evilTotal = evilRoles.reduce((s,r)=>s+(state.roles[r]||0),0);
+      const goodTotal = goodRoles.reduce((s,r)=>s+(state.roles[r]||0),0);
+      const otherTotal = otherRoles.reduce((s,r)=>s+(state.roles[r]||0),0);
+
+      const left =
+        `<div class="summaryTitle">Evil (${evilTotal}):</div>` +
+        `<div class="summaryList">${fmtList(evilRoles)}</div>` +
+        `<div class="summaryTitle" style="margin-top:10px">Other (${otherTotal}):</div>` +
+        `<div class="summaryList">${fmtList(otherRoles)}</div>`;
+      const right =
+        `<div class="summaryTitle">Good (${goodTotal}):</div>` +
+        `<div class="summaryList">${fmtList(goodRoles)}</div>`;
+
+      const html = `<div class="roleSummaryCols"><div>${left}</div><div>${right}</div></div>`;
+      await showModal({title:"Role Summary", message: html, confirmText:"OK", bigMessage:false, html:true});
+    };
 
     // Night navigation
     $("nightPrevBtn").onclick = () => { state.night.stepIndex--; renderNight(); };
