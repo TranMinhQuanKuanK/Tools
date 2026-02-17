@@ -16,13 +16,14 @@
     .col{flex:1;min-width:0}
     .card{background:rgba(18,26,51,.9);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px}
     .muted{color:var(--muted)}
-    button{cursor:pointer;border:1px solid rgba(255,255,255,.12);background:#1a2550;color:var(--txt);padding:10px 12px;border-radius:12px}
+    button{cursor:pointer;border:1px solid rgba(255,255,255,.12);background:#1a2550;color:var(--txt);padding:10px 12px;border-radius:12px;font-size:14px}
     .btnCompact{padding:6px 8px;font-size:12px}
     .btnMatch{padding:10px 12px;font-size:14px;width:100%}
     button:hover{filter:brightness(1.08)}
     button.secondary{background:transparent}
     button.danger{background:#4a1520;border-color:rgba(255,255,255,.08)}
     button.good{background:#0f3a2a;border-color:rgba(255,255,255,.08)}
+    button.warn{background:rgba(255,209,102,.18);border-color:rgba(255,209,102,.35);color:var(--warn)}
     button:disabled{opacity:.5;cursor:not-allowed}
     .disabledLike{opacity:.5;cursor:not-allowed}
     input, select, textarea{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:#0f1631;color:var(--txt)}
@@ -235,15 +236,14 @@
             <div class="mini" id="assignValidation"></div>
             <div class="hr"></div>
           </div>
-          <div class="row">
+          <div class="row" style="justify-content:space-between">
+            <button id="startGameBtn">Start game</button>
+          </div>
+          <div class="row" style="margin-top:8px">
             <button id="roleSummaryBtn" class="good menuWide">Role Summary</button>
           </div>
           <div class="row" style="margin-top:8px">
-            <button id="getRevealLinkBtn" class="menuWide">Get Link to Reveal All Roles</button>
-          </div>
-          <div class="hr"></div>
-          <div class="row" style="justify-content:space-between">
-            <button id="startGameBtn">Start game</button>
+            <button id="getRevealLinkBtn" class="menuWide warn">Get Link to Reveal All Roles</button>
           </div>
           <div class="row" style="margin-top:8px">
             <div class="inlineHalf">
@@ -872,7 +872,11 @@
       }
     });
     state.playerCount = snap.playerCount || state.players.length || 0;
-    state.roles = { ...defaultRoles, ...(snap.roles || {}) };
+    const cleanedRoles = { ...defaultRoles, ...(snap.roles || {}) };
+    for (const key of Object.keys(cleanedRoles)){
+      if (!roleMeta[key]) delete cleanedRoles[key];
+    }
+    state.roles = cleanedRoles;
     state.gameStarted = !!snap.gameStarted;
 
     const n = snap.night || {};
@@ -1331,7 +1335,13 @@
     // allow empty selection; include Villager only if configured
     if (state.roles[ROLE.VILLAGER] > 0 && !allowedRoles.includes(ROLE.VILLAGER)) allowedRoles.push(ROLE.VILLAGER);
 
+    let changed = false;
     state.players.forEach(p => {
+      if (p.role && !roleMeta[p.role]){
+        p.role = ROLE.VILLAGER;
+        if (p.baseRole === ROLE.DOPPELGANGER) p.baseRole = null;
+        changed = true;
+      }
       const row = document.createElement("div");
       row.className = "roleRow";
       row.innerHTML = `
@@ -1364,6 +1374,7 @@
     }
 
     renderAssignSidebar();
+    if (changed) saveState();
   }
 
   function renderAssignSidebar(){
