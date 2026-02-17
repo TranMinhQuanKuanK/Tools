@@ -44,6 +44,7 @@
       background:rgba(255,255,255,.05);text-align:left
     }
     .playerBtn.evil .name, .playerBtn.evil .mini{color:var(--bad)}
+    .playerBtn.other .name, .playerBtn.other .mini{color:var(--warn)}
     .playerBtn .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .playerBtn .mini{white-space:nowrap}
     .roleHighlight{box-shadow:0 0 0 3px #fff}
@@ -409,6 +410,11 @@
       <div class="col">
         <div class="card">
           <div class="mini">Tap a player name to reveal their role.</div>
+          <div class="hr"></div>
+          <button id="revealAllBtn" class="danger menuWide">Reveal All Roles!!!</button>
+          <div class="row" style="margin-top:8px">
+            <button id="revealSummaryBtn" class="good menuWide">Role Summary</button>
+          </div>
           <div class="hr"></div>
           <div id="revealList" class="grid"></div>
         </div>
@@ -2580,26 +2586,80 @@
     list.innerHTML = "";
     const revealed = new Set();
     const players = data.p || data.players || [];
+    const roleColorClass = (roleName) => {
+      if (roleMeta[roleName]?.side === SIDE.EVIL) return "bad";
+      if (roleMeta[roleName]?.side === SIDE.OTHER) return "other";
+      return "";
+    };
     players.forEach((p, idx) => {
       const b = document.createElement("button");
       b.className = "playerBtn";
       const name = p.n || p.name || `Player ${idx+1}`;
       b.innerHTML = `<span class="name"><b>${idx+1}.</b> ${escapeHtml(name)}</span><span class="mini">—</span>`;
       b.onclick = () => {
-        if (revealed.has(idx)){
-          revealed.delete(idx);
-          b.querySelector(".mini").textContent = "—";
-        } else {
-          const role = p.r != null ? idToRole(p.r) : (p.role || "—");
-          confirmModal(`Reveal ${name}'s role? Make sure you are ${name} or already dead.`).then(ok => {
-            if (!ok) return;
-            revealed.add(idx);
-            b.querySelector(".mini").textContent = role;
-          });
-        }
+        const role = p.r != null ? idToRole(p.r) : (p.role || "—");
+        confirmModal(`Reveal ${name}'s role? Make sure you are ${name} or already dead.`).then(async ok => {
+          if (!ok) return;
+          const cls = roleColorClass(role);
+          b.classList.remove("evil","other");
+          if (cls === "bad") b.classList.add("evil");
+          if (cls === "other") b.classList.add("other");
+          b.querySelector(".mini").textContent = role;
+          await showModal({title:"", message:`${name} is ${role}`, confirmText:"OK", bigMessage:true});
+        });
       };
       list.appendChild(b);
     });
+
+    const revealAllBtn = $("revealAllBtn");
+    if (revealAllBtn){
+      revealAllBtn.onclick = async () => {
+        const ok = await confirmModal("Do you want to reveal roles of all players?");
+        if (!ok) return;
+        const buttons = list.querySelectorAll("button");
+        players.forEach((p, idx) => {
+          const role = p.r != null ? idToRole(p.r) : (p.role || "—");
+          const cls = roleColorClass(role);
+          const btn = buttons[idx];
+          btn.classList.remove("evil","other");
+          if (cls === "bad") btn.classList.add("evil");
+          if (cls === "other") btn.classList.add("other");
+          const mini = btn.querySelector(".mini");
+          mini.textContent = role;
+        });
+      };
+    }
+    const revealSummaryBtn = $("revealSummaryBtn");
+    if (revealSummaryBtn){
+      revealSummaryBtn.onclick = async () => {
+        const countBySide = { evil: {}, good: {}, other: {} };
+        players.forEach(p => {
+          const role = p.r != null ? idToRole(p.r) : (p.role || "—");
+          const side = roleMeta[role]?.side || SIDE.GOOD;
+          const bucket = side === SIDE.EVIL ? "evil" : side === SIDE.OTHER ? "other" : "good";
+          countBySide[bucket][role] = (countBySide[bucket][role] || 0) + 1;
+        });
+        const fmtList = (obj) => {
+          const entries = Object.entries(obj);
+          if (!entries.length) return "-";
+          return entries.map(([r,c]) => `- ${c} ${r}`).join("\n");
+        };
+        const evilTotal = Object.values(countBySide.evil).reduce((s,v)=>s+v,0);
+        const goodTotal = Object.values(countBySide.good).reduce((s,v)=>s+v,0);
+        const otherTotal = Object.values(countBySide.other).reduce((s,v)=>s+v,0);
+
+        const left =
+          `<div class="summaryTitle">Evil (${evilTotal}):</div>` +
+          `<div class="summaryList">${fmtList(countBySide.evil)}</div>` +
+          `<div class="summaryTitle" style="margin-top:10px">Other (${otherTotal}):</div>` +
+          `<div class="summaryList">${fmtList(countBySide.other)}</div>`;
+        const right =
+          `<div class="summaryTitle">Good (${goodTotal}):</div>` +
+          `<div class="summaryList">${fmtList(countBySide.good)}</div>`;
+        const html = `<div class="roleSummaryCols"><div>${left}</div><div>${right}</div></div>`;
+        await showModal({title:"Role Summary", message: html, confirmText:"OK", bigMessage:false, html:true});
+      };
+    }
   }
 
   async function handleRevealFromUrl(){
