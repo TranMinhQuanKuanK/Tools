@@ -205,6 +205,9 @@
         <button id="backToS1Btn" class="secondary">Back</button>
         <button id="toAssignRolesBtn">Next</button>
       </div>
+      <div class="row" style="margin-top:8px">
+        <button id="roleSummaryBtnConfig" class="good menuWide">Role Summary</button>
+      </div>
     </div>
   </section>
 
@@ -1016,6 +1019,19 @@
   function getOutOfUsageWarning(margin="margin-top:6px"){
     return `<div class="mini warn" style="${margin}">Out of uses.</div>`;
   }
+
+  const ROLE_ORDER = [
+    ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF,
+    ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER,
+    ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID,
+    ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.DOPPELGANGER, ROLE.IDIOT, ROLE.PACIFIST,
+    ROLE.TROUBLEMAKER, ROLE.SOBER, ROLE.VILLAGER
+  ];
+  const roleToId = (role) => {
+    const idx = ROLE_ORDER.indexOf(role);
+    return idx >= 0 ? idx+1 : 0;
+  };
+  const idToRole = (id) => ROLE_ORDER[(id|0)-1] || "—";
 
   function toB64Url(bytes){
     let bin = "";
@@ -2563,10 +2579,11 @@
     if (!list) return;
     list.innerHTML = "";
     const revealed = new Set();
-    data.players.forEach((p, idx) => {
+    const players = data.p || data.players || [];
+    players.forEach((p, idx) => {
       const b = document.createElement("button");
       b.className = "playerBtn";
-      const name = p.name || `Player ${idx+1}`;
+      const name = p.n || p.name || `Player ${idx+1}`;
       b.innerHTML = `<span class="name"><b>${idx+1}.</b> ${escapeHtml(name)}</span><span class="mini">—</span>`;
       b.onclick = () => {
         if (revealed.has(idx)){
@@ -2574,7 +2591,8 @@
           b.querySelector(".mini").textContent = "—";
         } else {
           revealed.add(idx);
-          b.querySelector(".mini").textContent = p.role || "—";
+          const role = p.r != null ? idToRole(p.r) : (p.role || "—");
+          b.querySelector(".mini").textContent = role;
         }
       };
       list.appendChild(b);
@@ -2583,11 +2601,16 @@
 
   async function handleRevealFromUrl(){
     const params = new URLSearchParams(window.location.search);
-    const token = params.get("RI");
+    let token = params.get("RI");
+    if (!token && window.location.hash){
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      token = hashParams.get("RI");
+    }
+    if (token) token = token.trim().replace(/\s/g, "");
     if (!token) return false;
     try {
       const data = await decryptRoomInfo(token);
-      if (!data || !Array.isArray(data.players)) return false;
+      if (!data || !(Array.isArray(data.players) || Array.isArray(data.p))) return false;
       renderRevealScreen(data);
       showScreen("s8");
       return true;
@@ -2909,7 +2932,7 @@
     $("autoFillRolesBtn").onclick = () => autoFillRolesRandom();
     $("clearRolesBtn").onclick = () => clearRoles();
     $("startGameBtn").onclick = () => startGameFromAssignedRoles();
-    $("roleSummaryBtn").onclick = async () => {
+    const showRoleSummary = async () => {
       const fmtList = (roles) => roles
         .filter(r => (state.roles[r] || 0) > 0)
         .map(r => `- ${state.roles[r]} ${r}`)
@@ -2935,10 +2958,13 @@
       const html = `<div class="roleSummaryCols"><div>${left}</div><div>${right}</div></div>`;
       await showModal({title:"Role Summary", message: html, confirmText:"OK", bigMessage:false, html:true});
     };
+    $("roleSummaryBtn").onclick = showRoleSummary;
+    $("roleSummaryBtnConfig").onclick = showRoleSummary;
     $("getRevealLinkBtn").onclick = async () => {
       const payload = {
-        players: state.players.map(p => ({ name: p.name, role: getDisplayRole(p) }))
+        p: state.players.map(p => ({ n: p.name, r: roleToId(p.role) }))
       };
+      console.log("Reveal payload", payload);
       const token = await encryptRoomInfo(payload);
       const url = buildRevealUrl(token);
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
