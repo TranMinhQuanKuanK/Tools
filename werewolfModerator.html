@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Werewolf Moderator (Single File)</title>
   <style>
-    :root { --bg:#0b1020; --card:#121a33; --muted:#9aa6c3; --txt:#e7ecff; --bad:#ff5b6e; --good:#62ffa7; --warn:#ffd166; }
+    :root { --bg:#0b1020; --card:#121a33; --muted:#9aa6c3; --txt:#e7ecff; --bad:#ff5b6e; --good:#62ffa7; --warn:#ffd166; --header-h:48px; }
     *{box-sizing:border-box;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    body{margin:0;background:linear-gradient(180deg,#070a14,#0b1020);color:var(--txt)}
-    header{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:rgba(11,16,32,.85);backdrop-filter:blur(8px);z-index:10;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    html{background:#0b1020}
+    body{margin:0;min-height:100vh;background:linear-gradient(180deg,#070a14,#0b1020);color:var(--txt);overscroll-behavior-y:none;padding-top:var(--header-h)}
+    header{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.08);position:fixed;top:0;left:0;right:0;height:var(--header-h);background:rgba(11,16,32,.85);backdrop-filter:blur(8px);z-index:10;display:flex;align-items:center;justify-content:space-between;gap:8px}
     h1{margin:0;font-size:18px;line-height:1}
     .wrap{max-width:1100px;margin:0 auto;padding:16px}
     .row{display:flex;gap:12px;flex-wrap:wrap;flex-direction:column}
@@ -190,25 +191,25 @@
       <div class="${witchAlive ? "" : "disabledSection"}">
       <div class="row">
         <div class="col ${lifeDisabled ? "disabledSection" : ""}">
-          <div class="badge bad">Evil side</div>
+          <div class="badge bad">Evil side (<span id="evilCount">0</span>)</div>
           <table class="table" id="roleTableEvil"></table>
         </div>
         <div class="col ${lifeDisabled ? "disabledSection" : ""}">
-          <div class="badge">Good side</div>
+          <div class="badge">Good side (<span id="goodCount">0</span>)</div>
           <table class="table" id="roleTableGood"></table>
           <div class="hr"></div>
-          <div class="badge">Others</div>
+          <div class="badge">Others (<span id="otherCount">0</span>)</div>
           <table class="table" id="roleTableOther"></table>
         </div>
       </div>
 
       <div class="hr"></div>
-      <div class="inlineHalf">
-        <button id="backToS1Btn" class="secondary">Back</button>
-        <button id="toAssignRolesBtn">Next</button>
-      </div>
       <div class="row" style="margin-top:8px">
         <button id="roleSummaryBtnConfig" class="good menuWide">Role Summary</button>
+      </div>
+      <div class="inlineHalf" style="margin-top:8px">
+        <button id="backToS1Btn" class="secondary">Back</button>
+        <button id="toAssignRolesBtn">Next</button>
       </div>
     </div>
   </section>
@@ -1243,9 +1244,19 @@
       return tr;
     }
 
+    function updateRoleSideCounts(){
+      const evilCount = evil.reduce((sum, r) => sum + (state.roles[r] ?? 0), 0);
+      const goodCount = good.reduce((sum, r) => sum + (state.roles[r] ?? 0), 0);
+      const otherCount = other.reduce((sum, r) => sum + (state.roles[r] ?? 0), 0);
+      const e = $("evilCount"); if (e) e.textContent = evilCount;
+      const g = $("goodCount"); if (g) g.textContent = goodCount;
+      const o = $("otherCount"); if (o) o.textContent = otherCount;
+    }
+
     const tE = $("roleTableEvil"); tE.innerHTML = ""; evil.forEach(r => tE.appendChild(row(r)));
     const tG = $("roleTableGood"); tG.innerHTML = ""; good.forEach(r => tG.appendChild(row(r)));
     const tO = $("roleTableOther"); tO.innerHTML = ""; other.forEach(r => tO.appendChild(row(r)));
+    updateRoleSideCounts();
 
     for (const btn of document.querySelectorAll("table .qty button")){
       btn.onclick = async () => {
@@ -1271,6 +1282,7 @@
           if (state.roles[role] === 0) rowEl.classList.add("disabledRow");
           else rowEl.classList.remove("disabledRow");
         }
+        updateRoleSideCounts();
         updateQuickStatus();
         saveState();
       };
@@ -1438,9 +1450,22 @@
     const hasBites = (state.night.bites && state.night.bites.length > 0);
     const prompts = {
       cupid: "Cupid, wake up. Cupid selects 2 players to become a couple. You may choose not to use this ability.\n(After touching 2 players) The touched couple, wake up. These are your partners roles (show them the role popup, or they may silently reveal their cards).",
-      werewolf: state.day.wolfCubDiedLastDay
-        ? "Wolves, wake up. Wolves select players to bite (secretly tell them to bite 2 players tonight)."
-        : "Wolves, wake up. Wolves select players to bite.",
+      werewolf: (() => {
+        const canDoubleBite = state.day.wolfCubDiedLastDay;
+        const biteLine = canDoubleBite
+          ? "Wolves select players to bite (secretly tell them to bite 2 players tonight)."
+          : "Wolves select players to bite.";
+        if (state.night.number !== 1) return `Wolves, wake up. ${biteLine}`;
+        const evilRoles = Object.keys(roleMeta)
+          .filter(r => roleMeta[r]?.side === SIDE.EVIL && r !== ROLE.WEREWOLF);
+        const identifyLines = evilRoles.map(role => {
+          const names = state.players.filter(p => p.role === role).map(p => p.name).filter(Boolean);
+          if (!names.length) return "";
+          return `Who is ${role}? (${names.join(", ")} should raise hand)`;
+        }).filter(Boolean);
+        const lines = ["Wolves, wake up."].concat(identifyLines).concat([biteLine]);
+        return lines.join("\n");
+      })(),
       sorceress: "Sorceress, wake up. Sorceress selects players to check if they are Seer.",
       troublemaker: (state.day.troublemakerLastUseNight != null && state.day.troublemakerLastUseNight < state.night.number)
         ? "Troublemaker, wake up. Do you want to activate 2 lynches for the next day? (no uses remaining)"
@@ -2944,6 +2969,9 @@
     };
     $("resetGameBtn").onclick = () => {
       stopDayTimer(); stopVoteTimer();
+      if (location.search || location.hash){
+        history.replaceState(null, "", location.pathname);
+      }
       state.players.forEach(p => p.alive = true);
       // keep configured roles
       state.gameStarted = false;
