@@ -2590,9 +2590,12 @@
           revealed.delete(idx);
           b.querySelector(".mini").textContent = "—";
         } else {
-          revealed.add(idx);
           const role = p.r != null ? idToRole(p.r) : (p.role || "—");
-          b.querySelector(".mini").textContent = role;
+          confirmModal(`Reveal ${name}'s role? Make sure you are ${name} or already dead.`).then(ok => {
+            if (!ok) return;
+            revealed.add(idx);
+            b.querySelector(".mini").textContent = role;
+          });
         }
       };
       list.appendChild(b);
