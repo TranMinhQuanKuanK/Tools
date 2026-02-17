@@ -428,7 +428,7 @@
 <aside id="sidePanel" class="sidePanel">
   <div class="mini">Menu</div>
   <div class="hr"></div>
-  <button id="resetGameBtn" class="secondary menuWide menuLink">Reset game</button>
+  <button id="resetGameBtn" class="secondary menuWide menuLink">New game</button>
   <button id="aboutBtn" class="secondary menuWide menuLink">About me</button>
 </aside>
 
@@ -805,6 +805,10 @@
       startDayTimer();
       updateDayActions();
     }
+    if (nextId === "s2"){
+      trimRolesToPlayerCount();
+      renderRoleTables();
+    }
     if (nextId === "s5"){
       state.vote.timer = 0;
       $("lynchTimerText").textContent = fmtTime(0);
@@ -861,6 +865,8 @@
     if (!snap) return;
     state.players = snap.players || [];
     state.players.forEach(p => {
+      if (p.role) p.role = normalizeRole(p.role);
+      if (!p.role) p.role = ROLE.VILLAGER;
       if (p.baseRole == null){
         p.baseRole = (p.role === ROLE.DOPPELGANGER) ? ROLE.DOPPELGANGER : null;
       }
@@ -1022,6 +1028,22 @@
     const p = state.players.find(x => x.id === id);
     return p ? `${p.name} (${getDisplayRole(p)})` : "";
   }
+
+  function trimRolesToPlayerCount(){
+    let excess = roleTotal() - state.playerCount;
+    if (excess <= 0) return;
+    const goodRoles = [ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID, ROLE.DOPPELGANGER, ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.IDIOT, ROLE.PACIFIST, ROLE.TROUBLEMAKER, ROLE.VILLAGER];
+    const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF];
+    const otherRoles = [ROLE.SOBER];
+    const order = [...goodRoles, ...evilRoles, ...otherRoles];
+    for (const r of order){
+      if (excess <= 0) break;
+      while (state.roles[r] > 0 && excess > 0){
+        state.roles[r]--;
+        excess--;
+      }
+    }
+  }
   function getOutOfUsageWarning(margin="margin-top:6px"){
     return `<div class="mini warn" style="${margin}">Out of uses.</div>`;
   }
@@ -1080,6 +1102,9 @@
   }
   function isWolfRole(role){
     return isEvilRole(role);
+  }
+  function normalizeRole(role){
+    return roleMeta[role] ? role : ROLE.VILLAGER;
   }
   function aliveWolves(){
     return state.players.some(p => p.alive && (p.role === ROLE.WEREWOLF || p.role === ROLE.WOLFCUB || p.role === ROLE.SORCERESS || p.role === ROLE.DIRE_WOLF));
@@ -1175,7 +1200,7 @@
       id: idx+1,
       name,
       alive: prev[idx]?.alive ?? true,
-      role: prev[idx]?.role ?? null,
+      role: prev[idx]?.role ? normalizeRole(prev[idx].role) : null,
       baseRole: prev[idx]?.baseRole ?? (prev[idx]?.role === ROLE.DOPPELGANGER ? ROLE.DOPPELGANGER : null)
     }));
 
@@ -2715,6 +2740,7 @@
     // hard safety: ensure everyone has a role (default villager)
     state.players.forEach(p => {
       if (!p.role) p.role = ROLE.VILLAGER;
+      p.role = normalizeRole(p.role);
       if (p.role === ROLE.DOPPELGANGER && !p.baseRole) p.baseRole = ROLE.DOPPELGANGER;
     });
 
@@ -3033,7 +3059,7 @@
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
       const html =
         `<div class="summaryTitle">Link</div>` +
-        `<div class="summaryList">${escapeHtml(url)}</div>` +
+        `<div class="summaryList"><a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a></div>` +
         `<div class="summaryTitle" style="margin-top:10px">Scan QR</div>` +
         `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrUrl}" alt="QR"/></div>`;
       await showModal({title:"Reveal Roles Link", message: html, confirmText:"OK", bigMessage:false, html:true});
