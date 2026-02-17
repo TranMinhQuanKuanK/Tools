@@ -201,10 +201,6 @@
       </div>
 
       <div class="hr"></div>
-      <div class="row">
-        <button id="roleSummaryBtn" class="good menuWide">Role Summary</button>
-      </div>
-      <div class="hr"></div>
       <div class="inlineHalf">
         <button id="backToS1Btn" class="secondary">Back</button>
         <button id="toAssignRolesBtn">Next</button>
@@ -235,6 +231,13 @@
             <div class="mini" id="assignValidation"></div>
             <div class="hr"></div>
           </div>
+          <div class="row">
+            <button id="roleSummaryBtn" class="good menuWide">Role Summary</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button id="getRevealLinkBtn" class="menuWide">Get Link to Reveal All Roles</button>
+          </div>
+          <div class="hr"></div>
           <div class="row" style="justify-content:space-between">
             <button id="startGameBtn">Start game</button>
           </div>
@@ -389,6 +392,23 @@
       <div class="row">
         <button id="restartBtn" class="secondary">Reset game</button>
         <button id="backToDayFromWinBtn">Back to Day</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCREEN 8 -->
+  <section id="s8" class="screen">
+    <div class="topbar">
+      <div class="screenTitle">Role Reveal</div>
+    </div>
+
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="mini">Tap a player name to reveal their role.</div>
+          <div class="hr"></div>
+          <div id="revealList" class="grid"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -995,6 +1015,43 @@
   }
   function getOutOfUsageWarning(margin="margin-top:6px"){
     return `<div class="mini warn" style="${margin}">Out of uses.</div>`;
+  }
+
+  function toB64Url(bytes){
+    let bin = "";
+    bytes.forEach(b => bin += String.fromCharCode(b));
+    return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  }
+  function fromB64Url(str){
+    const pad = str.length % 4 === 0 ? "" : "=".repeat(4 - (str.length % 4));
+    const b64 = str.replace(/-/g,"+").replace(/_/g,"/") + pad;
+    const bin = atob(b64);
+    return Uint8Array.from(bin, c => c.charCodeAt(0));
+  }
+  async function encryptRoomInfo(data){
+    const enc = new TextEncoder();
+    const keyBytes = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
+    const cipher = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, enc.encode(JSON.stringify(data)));
+    return `${toB64Url(keyBytes)}.${toB64Url(iv)}.${toB64Url(new Uint8Array(cipher))}`;
+  }
+  async function decryptRoomInfo(token){
+    const [k, i, c] = (token || "").split(".");
+    if (!k || !i || !c) return null;
+    const keyBytes = fromB64Url(k);
+    const iv = fromB64Url(i);
+    const cipher = fromB64Url(c);
+    const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, cipher);
+    const dec = new TextDecoder();
+    return JSON.parse(dec.decode(plain));
+  }
+  function buildRevealUrl(token){
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("RI", token);
+    return url.toString();
   }
   function isRoleAlive(role){
     return state.players.some(p => p.alive && p.role === role);
@@ -2501,6 +2558,44 @@
     saveState();
   }
 
+  function renderRevealScreen(data){
+    const list = $("revealList");
+    if (!list) return;
+    list.innerHTML = "";
+    const revealed = new Set();
+    data.players.forEach((p, idx) => {
+      const b = document.createElement("button");
+      b.className = "playerBtn";
+      const name = p.name || `Player ${idx+1}`;
+      b.innerHTML = `<span class="name"><b>${idx+1}.</b> ${escapeHtml(name)}</span><span class="mini">—</span>`;
+      b.onclick = () => {
+        if (revealed.has(idx)){
+          revealed.delete(idx);
+          b.querySelector(".mini").textContent = "—";
+        } else {
+          revealed.add(idx);
+          b.querySelector(".mini").textContent = p.role || "—";
+        }
+      };
+      list.appendChild(b);
+    });
+  }
+
+  async function handleRevealFromUrl(){
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("RI");
+    if (!token) return false;
+    try {
+      const data = await decryptRoomInfo(token);
+      if (!data || !Array.isArray(data.players)) return false;
+      renderRevealScreen(data);
+      showScreen("s8");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // ----- Timers -----
   function startDayTimer(){
     if (state.timers.dayInterval) return;
@@ -2661,7 +2756,7 @@
   }
 
   // ----- Init -----
-  function init(){
+  async function init(){
     saveSuppressed = true;
     // init players
     state.playerCount = 10;
@@ -2692,6 +2787,8 @@
     }
     saveSuppressed = false;
     if (!saved) saveState();
+
+    await handleRevealFromUrl();
 
     // Screen 1
     $("playersTextarea").addEventListener("input", () => {
@@ -2837,6 +2934,20 @@
 
       const html = `<div class="roleSummaryCols"><div>${left}</div><div>${right}</div></div>`;
       await showModal({title:"Role Summary", message: html, confirmText:"OK", bigMessage:false, html:true});
+    };
+    $("getRevealLinkBtn").onclick = async () => {
+      const payload = {
+        players: state.players.map(p => ({ name: p.name, role: getDisplayRole(p) }))
+      };
+      const token = await encryptRoomInfo(payload);
+      const url = buildRevealUrl(token);
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+      const html =
+        `<div class="summaryTitle">Link</div>` +
+        `<div class="summaryList">${escapeHtml(url)}</div>` +
+        `<div class="summaryTitle" style="margin-top:10px">Scan QR</div>` +
+        `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrUrl}" alt="QR"/></div>`;
+      await showModal({title:"Reveal Roles Link", message: html, confirmText:"OK", bigMessage:false, html:true});
     };
 
     // Night navigation
