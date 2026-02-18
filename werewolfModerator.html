@@ -165,7 +165,7 @@
           </div>
           <div class="hr"></div>
           <div class="row">
-            <button id="playBtn">Next</button>
+            <button id="playBtn">Role configuration</button>
           </div>
         </div>
       </div>
@@ -209,7 +209,7 @@
       </div>
       <div class="inlineHalf" style="margin-top:8px">
         <button id="backToS1Btn" class="secondary">Back</button>
-        <button id="toAssignRolesBtn">Next</button>
+        <button id="toAssignRolesBtn">Assign roles to players</button>
       </div>
     </div>
   </section>
@@ -430,6 +430,8 @@
   <div class="mini">Menu</div>
   <div class="hr"></div>
   <button id="resetGameBtn" class="secondary menuWide menuLink">New game</button>
+  <button id="menuRevealLinkBtn" class="secondary menuWide menuLink">Get link to reveal roles</button>
+  <button id="menuRoleSummaryBtn" class="secondary menuWide menuLink">Role summary</button>
   <button id="aboutBtn" class="secondary menuWide menuLink">About me</button>
 </aside>
 
@@ -457,6 +459,7 @@
     SORCERESS: "Sorceress",
     WOLFCUB: "Wolf cub",
     FRUIT_WOLF: "Fruit Wolf",
+    CURSED: "Cursed",
     SEER: "Seer",
     APPRENTICE_SEER: "Apprentice Seer",
     MASON: "Mason",
@@ -486,6 +489,7 @@
     [ROLE.SORCERESS]: { side: SIDE.EVIL, note: "Each night, looks for the Seer" },
     [ROLE.WOLFCUB]:  { side: SIDE.EVIL, note: "If dies, next night wolves bite 2" },
     [ROLE.FRUIT_WOLF]: { side: SIDE.EVIL, note: "Cannot bite if only Fruit Wolves remain" },
+    [ROLE.CURSED]: { side: SIDE.EVIL, note: "Starts good; turns if bitten" },
     [ROLE.SEER]:     { side: SIDE.GOOD, note: "Reveal good/evil" },
     [ROLE.APPRENTICE_SEER]: { side: SIDE.GOOD, note: "Reveals good/evil after Seer dies" },
     [ROLE.MASON]:    { side: SIDE.GOOD, note: "First night: learn other Masons" },
@@ -513,6 +517,7 @@
     [ROLE.SORCERESS]: 0,
     [ROLE.WOLFCUB]: 1,
     [ROLE.FRUIT_WOLF]: 0,
+    [ROLE.CURSED]: 0,
     [ROLE.SEER]: 1,
     [ROLE.APPRENTICE_SEER]: 0,
     [ROLE.MASON]: 0,
@@ -604,6 +609,8 @@
       direWolfTargetId: null,
       pendingDireWolfId: null,
       pendingDireWolfNight: null,
+      cursedBittenLastNight: [],
+      cursedTurnedIds: [],
     },
 
     vote: { selectedId: null, timer: 0, interval: null },
@@ -709,6 +716,22 @@
     state.day.doppelgangerPendingRole = null;
     resetRoleUsageForDoppel(role);
     return role;
+  }
+
+  function applyCursedTurn(){
+    const ids = state.day.cursedBittenLastNight || [];
+    if (!ids.length) return [];
+    const turned = [];
+    state.day.cursedTurnedIds = state.day.cursedTurnedIds || [];
+    ids.forEach(id => {
+      if (state.day.cursedTurnedIds.includes(id)) return;
+      const p = state.players.find(x => x.id === id);
+      if (p && p.alive && p.role === ROLE.CURSED){
+        state.day.cursedTurnedIds.push(id);
+        turned.push(id);
+      }
+    });
+    return turned;
   }
 
   function snapshotState(){
@@ -936,6 +959,8 @@
       pendingCoupleId: null,
       silencedId: null,
       priestLastUseNight: null,
+      cursedBittenLastNight: [],
+      cursedTurnedIds: [],
       ...(snap.day || {})
     };
     if (state.day.priestLastUseNight == null) state.day.priestLastUseNight = null;
@@ -946,6 +971,8 @@
     if (state.day.direWolfTargetId == null) state.day.direWolfTargetId = null;
     if (state.day.pendingDireWolfId == null) state.day.pendingDireWolfId = null;
     if (state.day.pendingDireWolfNight == null) state.day.pendingDireWolfNight = null;
+    if (!Array.isArray(state.day.cursedBittenLastNight)) state.day.cursedBittenLastNight = [];
+    if (!Array.isArray(state.day.cursedTurnedIds)) state.day.cursedTurnedIds = [];
 
     state.vote.selectedId = snap.vote?.selectedId ?? null;
     state.vote.timer = snap.vote?.timer ?? 0;
@@ -1025,7 +1052,13 @@
     return `${m}:${s}`;
   }
 
-  function isEvilRole(role){ return roleMeta[role]?.side === SIDE.EVIL; }
+  function isEvilRole(role, playerId=null){
+    if (role === ROLE.CURSED){
+      return !!(playerId && state.day.cursedTurnedIds && state.day.cursedTurnedIds.includes(playerId));
+    }
+    return roleMeta[role]?.side === SIDE.EVIL;
+  }
+  function isEvilPlayer(p){ return !!(p && isEvilRole(p.role, p.id)); }
   function labelPlayer(id){
     if (!id) return "";
     const p = state.players.find(x => x.id === id);
@@ -1041,7 +1074,7 @@
     let excess = roleTotal() - state.playerCount;
     if (excess <= 0) return;
     const goodRoles = [ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID, ROLE.DOPPELGANGER, ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.IDIOT, ROLE.PACIFIST, ROLE.TROUBLEMAKER, ROLE.VILLAGER];
-    const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF];
+    const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF, ROLE.CURSED];
     const otherRoles = [ROLE.SOBER];
     const order = [...goodRoles, ...evilRoles, ...otherRoles];
     for (const r of order){
@@ -1057,7 +1090,7 @@
   }
 
   const ROLE_ORDER = [
-    ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF,
+    ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF, ROLE.CURSED,
     ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER,
     ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID,
     ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.DOPPELGANGER, ROLE.IDIOT, ROLE.PACIFIST,
@@ -1108,17 +1141,17 @@
   function isRoleAlive(role){
     return state.players.some(p => p.alive && p.role === role);
   }
-  function isWolfRole(role){
-    return isEvilRole(role);
+  function isWolfRole(role, playerId=null){
+    return isEvilRole(role, playerId);
   }
   function normalizeRole(role){
     return roleMeta[role] ? role : ROLE.VILLAGER;
   }
   function aliveWolves(){
-    return state.players.some(p => p.alive && isEvilRole(p.role));
+    return state.players.some(p => p.alive && isEvilRole(p.role, p.id));
   }
   function canWolvesBite(){
-    return state.players.some(p => p.alive && isEvilRole(p.role) && p.role !== ROLE.FRUIT_WOLF);
+    return state.players.some(p => p.alive && isEvilRole(p.role, p.id) && p.role !== ROLE.FRUIT_WOLF);
   }
 
   function linesFromTextarea(){
@@ -1152,6 +1185,7 @@
     if (state.roles[ROLE.DIRE_WOLF] > 0 && state.night.number === 1) steps.push("dire_wolf");
     if (state.roles[ROLE.DOPPELGANGER] > 0) steps.push("doppelganger");
     if (state.roles[ROLE.CUPID] > 0 && state.night.number === 1) steps.push("cupid");
+    if (state.roles[ROLE.CURSED] > 0) steps.push("cursed");
     if (
       state.roles[ROLE.WEREWOLF] + state.roles[ROLE.WOLFCUB] +
       state.roles[ROLE.SORCERESS] + state.roles[ROLE.DIRE_WOLF] +
@@ -1227,7 +1261,7 @@
   }
 
   function renderRoleTables(){
-    const evil = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF];
+    const evil = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF, ROLE.CURSED];
     const good = [ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID, ROLE.DOPPELGANGER, ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.IDIOT, ROLE.PACIFIST, ROLE.TROUBLEMAKER, ROLE.VILLAGER];
     const other = [ROLE.SOBER];
 
@@ -1305,7 +1339,7 @@
     state.players.forEach(p => {
       const btn = document.createElement("button");
       btn.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) btn.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) btn.classList.add("evil");
       btn.innerHTML = `
         <span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span>
         <span class="mini">${escapeHtml(getDisplayRole(p))}</span>
@@ -1405,7 +1439,7 @@
     box.innerHTML = "";
 
     const items = [
-      ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.FRUIT_WOLF, ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID, ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.DOPPELGANGER, ROLE.SOBER, ROLE.IDIOT, ROLE.PACIFIST, ROLE.TROUBLEMAKER, ROLE.VILLAGER
+      ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.FRUIT_WOLF, ROLE.CURSED, ROLE.SEER, ROLE.APPRENTICE_SEER, ROLE.MASON, ROLE.BODYGUARD, ROLE.HUNTER, ROLE.WITCH, ROLE.DISEASED, ROLE.TOUGH_GUY, ROLE.PI, ROLE.MAYOR, ROLE.CUPID, ROLE.SPELLCASTER, ROLE.PRIEST, ROLE.DOPPELGANGER, ROLE.SOBER, ROLE.IDIOT, ROLE.PACIFIST, ROLE.TROUBLEMAKER, ROLE.VILLAGER
     ].filter(r => (r===ROLE.VILLAGER) || (state.roles[r] != null));
 
     items.forEach(r => {
@@ -1460,15 +1494,31 @@
     const hasBites = (state.night.bites && state.night.bites.length > 0);
     const prompts = {
       cupid: "Cupid, wake up. Cupid selects 2 players to become a couple. You may choose not to use this ability.\n(After touching 2 players) The touched couple, wake up. These are your partners roles (show them the role popup, or they may silently reveal their cards).",
+      cursed: (() => {
+        const bittenIds = state.day.cursedBittenLastNight || [];
+        const turnedIds = state.day.cursedTurnedIds || [];
+        const bitten = bittenIds.length > 0;
+        const cursedNames = state.players.filter(p => p.role === ROLE.CURSED).map(p => p.name).filter(Boolean);
+        const note = bitten
+          ? (cursedNames.length ? ` (silently tell ${cursedNames.join(", ")} they were bitten last night)` : "")
+          : (turnedIds.length
+              ? " (no action)"
+              : (cursedNames.length
+                  ? ` (silently tell ${cursedNames.join(", ")} they have not been bitten yet)`
+                  : ""));
+        return `Cursed, wake up. This is your status tonight:${note}`;
+      })(),
       werewolf: (() => {
         const canBite = canWolvesBite();
         const canDoubleBite = state.day.wolfCubDiedLastDay && canBite;
-        const biteLine = canDoubleBite
-          ? "Wolves select players to bite (secretly tell them to bite 2 players tonight)."
-          : "Wolves select players to bite.";
+        const biteLine = canBite
+          ? (canDoubleBite
+              ? "Wolves select players to bite (secretly tell them to bite 2 players tonight)."
+              : "Wolves select players to bite.")
+          : "Wolves select players to bite (only Fruit Wolves remaining).";
         if (state.night.number !== 1) return `Wolves, wake up. ${biteLine}`;
         const evilRoles = Object.keys(roleMeta)
-          .filter(r => roleMeta[r]?.side === SIDE.EVIL && r !== ROLE.WEREWOLF);
+          .filter(r => roleMeta[r]?.side === SIDE.EVIL && r !== ROLE.WEREWOLF && r !== ROLE.CURSED);
         const identifyLines = evilRoles.map(role => {
           const names = state.players.filter(p => p.role === role).map(p => p.name).filter(Boolean);
           if (!names.length) return "";
@@ -1561,6 +1611,7 @@
       } else {
         const roleMap = {
           doppelganger: ROLE.DOPPELGANGER,
+          cursed: ROLE.CURSED,
           werewolf: ROLE.WEREWOLF,
           sorceress: ROLE.SORCERESS,
           troublemaker: ROLE.TROUBLEMAKER,
@@ -1597,6 +1648,7 @@
 
     if (step === "dire_wolf") renderDireWolfPanel(panel);
     else if (step === "doppelganger") renderDoppelgangerPanel(panel);
+    else if (step === "cursed") renderCursedPanel(panel);
     else if (step === "werewolf") renderWerewolfPanel(panel);
     else if (step === "sorceress") renderSorceressPanel(panel);
     else if (step === "troublemaker") renderTroublemakerPanel(panel);
@@ -1634,8 +1686,8 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
-      if (p.role === ROLE.WEREWOLF || p.role === ROLE.WOLFCUB || p.role === ROLE.SORCERESS || p.role === ROLE.DIRE_WOLF || p.role === ROLE.FRUIT_WOLF) b.classList.add("roleHighlight");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
+      if (p.role === ROLE.WEREWOLF || p.role === ROLE.WOLFCUB || p.role === ROLE.SORCERESS || p.role === ROLE.DIRE_WOLF || p.role === ROLE.FRUIT_WOLF || (p.role === ROLE.CURSED && isEvilRole(p.role, p.id))) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !wolvesAlive || !canBite;
       const chosen = state.night.bites.includes(p.id);
       b.style.outline = chosen ? "2px solid rgba(255,209,102,.8)" : "";
@@ -1669,7 +1721,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.SEER) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !seerAlive;
       const chosen = state.night.seerInspectId === p.id;
@@ -1679,7 +1731,7 @@
       b.onclick = () => {
         if (!seerAlive) return;
         state.night.seerInspectId = p.id;
-        const res = isEvilRole(p.role) ? "Not Villager (Evil)" : "Villager side (Good)";
+        const res = isEvilRole(p.role, p.id) ? "Not Villager (Evil)" : "Villager side (Good)";
         state.night.seerResult = res;
         renderNight();
       };
@@ -1701,7 +1753,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.BODYGUARD) b.classList.add("roleHighlight");
       const blockedRepeat = (p.id === lastBgId);
       b.disabled = !p.alive || !bgAlive;
@@ -1738,7 +1790,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.MASON) b.classList.add("roleHighlight");
       b.disabled = true;
       const roleLabel = escapeHtml(getDisplayRole(p));
@@ -1777,7 +1829,7 @@
       state.players.forEach(p => {
         const b = document.createElement("button");
         b.className = "playerBtn" + (p.alive ? "" : " dead");
-        if (isEvilRole(p.role)) b.classList.add("evil");
+        if (isEvilRole(p.role, p.id)) b.classList.add("evil");
         if (p.role === ROLE.DOPPELGANGER || p.baseRole === ROLE.DOPPELGANGER) b.classList.add("roleHighlight");
         b.disabled = !canChoose;
         const chosen = targetId === p.id;
@@ -1810,7 +1862,7 @@
       state.players.forEach(p => {
         const b = document.createElement("button");
         b.className = "playerBtn" + (p.alive ? "" : " dead");
-        if (isEvilRole(p.role)) b.classList.add("evil");
+        if (isEvilRole(p.role, p.id)) b.classList.add("evil");
         if (p.role === ROLE.DIRE_WOLF) b.classList.add("roleHighlight");
         b.disabled = !p.alive || !canChoose;
         const chosen = targetId === p.id;
@@ -1843,7 +1895,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.CUPID) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !cupidAlive;
       const chosen = state.night.cupidSelectedIds.includes(p.id);
@@ -1901,7 +1953,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.SORCERESS) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !sorcAlive;
       const chosen = state.night.sorceressInspectId === p.id;
@@ -1968,7 +2020,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.APPRENTICE_SEER) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !canAct;
       const chosen = state.night.apprenticeInspectId === p.id;
@@ -1978,7 +2030,7 @@
       b.onclick = () => {
         if (!canAct) return;
         state.night.apprenticeInspectId = p.id;
-        const res = isEvilRole(p.role) ? "Not Villager (Evil)" : "Villager side (Good)";
+        const res = isEvilRole(p.role, p.id) ? "Not Villager (Evil)" : "Villager side (Good)";
         state.night.apprenticeResult = res;
         renderNight();
       };
@@ -2003,7 +2055,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.PI) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !piAlive;
       const chosen = state.night.piSelectedIds.includes(p.id);
@@ -2028,7 +2080,7 @@
           }
           const anyWerewolf = state.night.piSelectedIds.some(id => {
             const p = state.players.find(x => x.id === id);
-            return p && isWolfRole(p.role);
+            return p && isWolfRole(p.role, p.id);
           });
           state.night.piResult = anyWerewolf ? "At least one is a Werewolf" : "No Werewolf among them";
           state.night.piChecked = true;
@@ -2055,7 +2107,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.SPELLCASTER) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !alive;
       const chosen = state.night.spellcasterTargetId === p.id;
@@ -2086,7 +2138,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.PRIEST) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !alive;
       const chosen = state.night.priestProtectId === p.id;
@@ -2193,7 +2245,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.WITCH) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !witchAlive;
       const chosen = state.night.witchKillId === p.id;
@@ -2230,7 +2282,7 @@
     state.players.forEach(p => {
       const b = document.createElement("button");
       b.className = "playerBtn" + (p.alive ? "" : " dead");
-      if (isEvilRole(p.role)) b.classList.add("evil");
+      if (isEvilRole(p.role, p.id)) b.classList.add("evil");
       if (p.role === ROLE.HUNTER) b.classList.add("roleHighlight");
       b.disabled = !p.alive || !hunterAlive;
       const chosen = state.night.hunterMarkId === p.id;
@@ -2301,8 +2353,8 @@
     return details;
   }
 
-  function countAliveEvil(){ return state.players.filter(p => p.alive && isEvilRole(p.role)).length; }
-  function countAliveNonEvil(){ return state.players.filter(p => p.alive && !isEvilRole(p.role)).length; }
+  function countAliveEvil(){ return state.players.filter(p => p.alive && isEvilRole(p.role, p.id)).length; }
+  function countAliveNonEvil(){ return state.players.filter(p => p.alive && !isEvilRole(p.role, p.id)).length; }
 
   function setWinner(type, title, details){
     recordDayLog();
@@ -2330,8 +2382,8 @@
       const b = state.players.find(x => x.id === bId);
       const alivePlayers = state.players.filter(p => p.alive);
       if (a && b && a.alive && b.alive && alivePlayers.length === 2){
-        const aEvil = isEvilRole(a.role);
-        const bEvil = isEvilRole(b.role);
+        const aEvil = isEvilRole(a.role, a.id);
+        const bEvil = isEvilRole(b.role, b.id);
         if (aEvil !== bEvil){
           return setWinner("Couple", "Couple wins", [
             `Couple survived as the last two players.`,
@@ -2429,6 +2481,20 @@
     if (state.night.witchSaveId){
       appendNightLog(`Witch protected ${labelPlayerWithRole(state.night.witchSaveId)}`);
       bittenEffective = bittenEffective.filter(id => id !== state.night.witchSaveId);
+    }
+
+    // Cursed: bitten -> turns next night (does not die from bite)
+    state.day.cursedBittenLastNight = [];
+    const cursedBitten = bittenEffective.filter(id => {
+      const p = state.players.find(x => x.id === id);
+      return p && p.alive && p.role === ROLE.CURSED && !isEvilRole(p.role, p.id);
+    });
+    if (cursedBitten.length){
+      cursedBitten.forEach(id => {
+        bittenEffective = bittenEffective.filter(x => x !== id);
+        state.day.cursedBittenLastNight.push(id);
+      });
+      appendNightLog(`Cursed was bitten and will turn next night: ${cursedBitten.map(labelPlayerWithRole).join(", ")}`);
     }
 
     // Tough Guy delayed death (from prior night)
@@ -2655,6 +2721,26 @@
     saveState();
   }
 
+  function renderCursedPanel(panel){
+    const cursedPlayers = state.players.filter(p => p.role === ROLE.CURSED);
+    const alive = cursedPlayers.some(p => p.alive);
+    const bittenIds = state.day.cursedBittenLastNight || [];
+    const lines = cursedPlayers.map(p => {
+      const bitten = bittenIds.includes(p.id);
+      const turned = turnedIds.includes(p.id);
+      let status = "has not been bitten yet";
+      if (turned) status = "has become a wolf";
+      else if (bitten) status = "was bitten last night";
+      return `${p.name} ${status}.`;
+    }).join("\n") || "No cursed players.";
+    panel.innerHTML = `
+      <div class="${alive ? "" : "disabledSection"}">
+        <div class="mini" style="white-space:pre-wrap">${escapeHtml(lines)}</div>
+        ${alive ? "" : '<div class="mini warn" style="margin-top:6px">Cursed is dead.</div>'}
+      </div>
+    `;
+  }
+
   function renderRevealScreen(data){
     const list = $("revealList");
     if (!list) return;
@@ -2680,7 +2766,8 @@
           if (cls === "bad") b.classList.add("evil");
           if (cls === "other") b.classList.add("other");
           b.querySelector(".mini").textContent = role;
-          await showModal({title:"", message:`${name} is ${role}`, confirmText:"OK", bigMessage:true});
+          const note = roleMeta[role]?.note ? `<div class="mini" style="margin-top:6px">${escapeHtml(role)}: ${escapeHtml(roleMeta[role].note)}</div>` : "";
+          await showModal({title:"", message:`${escapeHtml(name)} is ${escapeHtml(role)}${note}`, confirmText:"OK", bigMessage:true, html:true});
         });
       };
       list.appendChild(b);
@@ -2830,6 +2917,8 @@
     state.day.direWolfTargetId = null;
     state.day.pendingDireWolfId = null;
     state.day.pendingDireWolfNight = null;
+    state.day.cursedBittenLastNight = [];
+    state.day.cursedTurnedIds = [];
     state.day.doppelgangerTargetId = null;
     state.day.doppelgangerPendingRole = null;
     state.day.doppelgangerRole = null;
@@ -2864,6 +2953,10 @@
     resetNightState({keepPotions:true});
     const dgRole = applyDoppelgangerPendingRole();
     if (dgRole) appendNightLog(`Doppelganger became ${dgRole}.`);
+    const cursedTurned = applyCursedTurn();
+    if (cursedTurned.length){
+      appendNightLog(`Cursed turned into wolves: ${cursedTurned.map(labelPlayerWithRole).join(", ")}`);
+    }
 
     renderNight();
     showScreen(3);
@@ -3021,6 +3114,8 @@
       state.day.direWolfTargetId = null;
       state.day.pendingDireWolfId = null;
       state.day.pendingDireWolfNight = null;
+      state.day.cursedBittenLastNight = [];
+      state.day.cursedTurnedIds = [];
     state.day.doppelgangerTargetId = null;
     state.day.doppelgangerPendingRole = null;
     state.day.doppelgangerRole = null;
@@ -3080,7 +3175,7 @@
         .map(r => `- ${state.roles[r]} ${r}`)
         .join("\n") || "-";
 
-      const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF];
+      const evilRoles = [ROLE.WEREWOLF, ROLE.SORCERESS, ROLE.WOLFCUB, ROLE.DIRE_WOLF, ROLE.FRUIT_WOLF, ROLE.CURSED];
       const goodRoles = Object.keys(state.roles).filter(r => roleMeta[r]?.side === SIDE.GOOD);
       const otherRoles = Object.keys(state.roles).filter(r => roleMeta[r]?.side === SIDE.OTHER);
 
@@ -3100,9 +3195,7 @@
       const html = `<div class="roleSummaryCols"><div>${left}</div><div>${right}</div></div>`;
       await showModal({title:"Role Summary", message: html, confirmText:"OK", bigMessage:false, html:true});
     };
-    $("roleSummaryBtn").onclick = showRoleSummary;
-    $("roleSummaryBtnConfig").onclick = showRoleSummary;
-    $("getRevealLinkBtn").onclick = async () => {
+    const showRevealLinkModal = async () => {
       const payload = {
         p: state.players.map(p => ({ n: p.name, r: roleToId(p.role) }))
       };
@@ -3116,6 +3209,17 @@
         `<div class="summaryTitle" style="margin-top:10px">Scan QR</div>` +
         `<div style="display:flex;justify-content:center;margin-top:6px"><img src="${qrUrl}" alt="QR"/></div>`;
       await showModal({title:"Reveal Roles Link", message: html, confirmText:"OK", bigMessage:false, html:true});
+    };
+    $("roleSummaryBtn").onclick = showRoleSummary;
+    $("roleSummaryBtnConfig").onclick = showRoleSummary;
+    $("getRevealLinkBtn").onclick = showRevealLinkModal;
+    $("menuRevealLinkBtn").onclick = async () => {
+      closeMenu();
+      await showRevealLinkModal();
+    };
+    $("menuRoleSummaryBtn").onclick = async () => {
+      closeMenu();
+      await showRoleSummary();
     };
 
     // Night navigation
@@ -3277,5 +3381,6 @@
 </script>
 </body>
 </html>
+
 
 
