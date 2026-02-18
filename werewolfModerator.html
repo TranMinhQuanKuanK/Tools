@@ -264,6 +264,7 @@
   <section id="s3" class="screen">
     <div class="topbar">
       <div class="screenTitle" id="nightTitle">Night</div>
+      <div id="nightTimersText" class="mini" style="text-align:center;width:100%">Night: 00:00 - ROLE: 00:00</div>
     </div>
 
     <div class="row">
@@ -614,7 +615,7 @@
     },
 
     vote: { selectedId: null, timer: 0, interval: null },
-    timers: { day: 0, dayInterval: null },
+    timers: { day: 0, dayInterval: null, night: 0, nightInterval: null, role: 0 },
 
     winner: null,
   };
@@ -771,7 +772,7 @@
       },
       day: state.day,
       vote: { selectedId: state.vote.selectedId, timer: state.vote.timer },
-      timers: { day: state.timers.day },
+      timers: { day: state.timers.day, night: state.timers.night, role: state.timers.role },
       winner: state.winner,
     }));
   }
@@ -819,6 +820,7 @@
 
     if (prevId === "s4") stopDayTimer();
     if (prevId === "s5") stopVoteTimer();
+    if (prevId === "s3") stopNightTimer();
 
     for (const el of document.querySelectorAll(".screen")) el.classList.remove("active");
     $(nextId).classList.add("active");
@@ -840,6 +842,10 @@
       state.vote.timer = 0;
       $("lynchTimerText").textContent = fmtTime(0);
       startVoteTimer();
+    }
+    if (nextId === "s3"){
+      updateNightTimersText();
+      startNightTimer();
     }
     updateQuickStatus();
     if (!saveSuppressed) saveState();
@@ -978,7 +984,10 @@
     state.vote.timer = snap.vote?.timer ?? 0;
     state.vote.interval = null;
     state.timers.day = snap.timers?.day ?? 0;
+    state.timers.night = snap.timers?.night ?? 0;
+    state.timers.role = snap.timers?.role ?? 0;
     state.timers.dayInterval = null;
+    state.timers.nightInterval = null;
     state.winner = snap.winner ?? null;
 
     state.night.steps = buildNightSteps();
@@ -1050,6 +1059,13 @@
     const m = String(Math.floor(sec/60)).padStart(2,"0");
     const s = String(sec%60).padStart(2,"0");
     return `${m}:${s}`;
+  }
+
+  function updateNightTimersText(){
+    const el = $("nightTimersText");
+    if (!el) return;
+    const roleLabel = state.night.currentStepLabel || "ROLE";
+    el.textContent = `Night: ${fmtTime(state.timers.night)} - ${roleLabel}: ${fmtTime(state.timers.role)}`;
   }
 
   function isEvilRole(role, playerId=null){
@@ -1600,6 +1616,10 @@
     state.night.steps = buildNightSteps();
     state.night.stepIndex = clamp(state.night.stepIndex, 0, Math.max(0, state.night.steps.length-1));
     const step = state.night.steps[state.night.stepIndex] || "—";
+    if (state.night.lastStepKey !== step){
+      state.timers.role = 0;
+      state.night.lastStepKey = step;
+    }
     let stepLabel = String(step).replace(/_/g," ").toUpperCase();
     if (stepLabel && stepLabel !== "?"){
       if (step === "couple"){
@@ -1632,6 +1652,8 @@
     }
     const nightTitle = $("nightTitle");
     if (nightTitle) nightTitle.textContent = stepLabel;
+    state.night.currentStepLabel = stepLabel;
+    updateNightTimersText();
     const nightPrompt = $("nightPrompt");
     if (nightPrompt){
       nightPrompt.innerHTML = formatPrompt(getNightPrompt(step));
@@ -2116,7 +2138,11 @@
       b.innerHTML = `<span class="name"><b>${p.id}.</b> ${escapeHtml(p.name)}</span><span class="mini">${roleLabel}${chosen ? " • chosen" : ""}</span>`;
       b.onclick = () => {
         if (!alive) return;
-        state.night.spellcasterTargetId = p.id;
+        if (state.night.spellcasterTargetId === p.id){
+          state.night.spellcasterTargetId = null;
+        } else {
+          state.night.spellcasterTargetId = p.id;
+        }
         renderNight();
       };
       pick.appendChild(b);
@@ -2766,7 +2792,7 @@
           if (cls === "bad") b.classList.add("evil");
           if (cls === "other") b.classList.add("other");
           b.querySelector(".mini").textContent = role;
-          const note = roleMeta[role]?.note ? `<div class="mini" style="margin-top:6px">${escapeHtml(role)}: ${escapeHtml(roleMeta[role].note)}</div>` : "";
+          const note = roleMeta[role]?.note ? `<div class="mini" style="margin-top:6px">${escapeHtml(roleMeta[role].note)}</div>` : "";
           await showModal({title:"", message:`${escapeHtml(name)} is ${escapeHtml(role)}${note}`, confirmText:"OK", bigMessage:true, html:true});
         });
       };
@@ -2837,6 +2863,7 @@
       const data = await decryptRoomInfo(token);
       if (!data || !(Array.isArray(data.players) || Array.isArray(data.p))) return false;
       renderRevealScreen(data);
+      history.replaceState(null, "", location.pathname);
       showScreen("s8");
       return true;
     } catch {
@@ -2852,10 +2879,24 @@
       $("dayTimerText").textContent = fmtTime(state.timers.day);
     }, 1000);
   }
+  function startNightTimer(){
+    if (state.timers.nightInterval) return;
+    state.timers.nightInterval = setInterval(() => {
+      state.timers.night++;
+      state.timers.role++;
+      updateNightTimersText();
+    }, 1000);
+  }
   function stopDayTimer(){
     if (state.timers.dayInterval){
       clearInterval(state.timers.dayInterval);
       state.timers.dayInterval = null;
+    }
+  }
+  function stopNightTimer(){
+    if (state.timers.nightInterval){
+      clearInterval(state.timers.nightInterval);
+      state.timers.nightInterval = null;
     }
   }
   function startVoteTimer(){
@@ -2928,11 +2969,15 @@
     state.night.priestProtectId = null;
     state.night.priestUsed = false;
 
-    stopDayTimer(); state.timers.day = 0; $("dayTimerText").textContent = "00:00";
+    stopDayTimer(); stopNightTimer(); state.timers.day = 0; $("dayTimerText").textContent = "00:00";
     stopVoteTimer(); state.vote.timer = 0; $("lynchTimerText").textContent = "00:00";
+    state.timers.night = 0;
+    state.timers.role = 0;
+    updateNightTimersText();
 
     // reset night
     state.night.number = 1;
+    state.night.lastStepKey = null;
     resetNightState({keepPotions:false});
 
     renderNight();
@@ -2951,6 +2996,10 @@
     // Keep potion usage across nights (typical), but your spec didn't say;
     // If you want per-night reset, set keepPotions=false.
     resetNightState({keepPotions:true});
+    state.timers.night = 0;
+    state.timers.role = 0;
+    state.night.lastStepKey = null;
+    updateNightTimersText();
     const dgRole = applyDoppelgangerPendingRole();
     if (dgRole) appendNightLog(`Doppelganger became ${dgRole}.`);
     const cursedTurned = applyCursedTurn();
@@ -2964,6 +3013,7 @@
 
   function resetToDefaults(){
     stopDayTimer(); stopVoteTimer();
+    stopNightTimer();
     state.playerCount = 10;
     state.players = Array.from({length: state.playerCount}, (_,i)=>({
       id:i+1, name:`Player ${i+1}`, alive:true, role:ROLE.VILLAGER, baseRole:null
@@ -2994,10 +3044,14 @@
     state.vote.timer = 0;
 
     state.timers.day = 0;
+    state.timers.night = 0;
+    state.timers.role = 0;
     $("dayTimerText").textContent = "00:00";
     $("lynchTimerText").textContent = "00:00";
+    updateNightTimersText();
 
     state.night.number = 1;
+    state.night.lastStepKey = null;
     resetNightState({keepPotions:false});
 
     renderPlayersTextarea();
@@ -3131,8 +3185,9 @@
       $("dayTimerText").textContent = "00:00";
       $("lynchTimerText").textContent = "00:00";
 
-      state.night.number = 1;
-      resetNightState({keepPotions:false});
+    state.night.number = 1;
+    state.night.lastStepKey = null;
+    resetNightState({keepPotions:false});
 
       renderPlayersTextarea();
       renderRoleTables();
@@ -3355,10 +3410,14 @@
       state.day.piUses = 0;
       state.day.piLastUseNight = null;
 
-      stopDayTimer(); state.timers.day = 0; $("dayTimerText").textContent = "00:00";
+      stopDayTimer(); stopNightTimer(); state.timers.day = 0; $("dayTimerText").textContent = "00:00";
       stopVoteTimer(); state.vote.timer = 0; $("lynchTimerText").textContent = "00:00";
+      state.timers.night = 0;
+      state.timers.role = 0;
+      updateNightTimersText();
 
       state.night.number = 1;
+      state.night.lastStepKey = null;
       resetNightState({keepPotions:false});
       state.winner = null;
 
