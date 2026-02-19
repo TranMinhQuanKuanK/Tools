@@ -105,7 +105,7 @@
     }
     .modal.show{opacity:1;pointer-events:auto}
     .modal .card{max-width:320px;width:100%;max-height:80vh;display:flex;flex-direction:column}
-    .modalBody{overflow:auto;max-height:60vh}
+    .modalBody{overflow:auto;max-height:calc(80vh - 120px)}
     .modalActions{display:flex;gap:8px;justify-content:flex-end}
     .modal .card .confirmBtn{
       background:#f2f4ff;color:#0b1020;border:none;padding:10px 12px;border-radius:12px;
@@ -328,9 +328,11 @@
 
       <div class="col">
         <div class="card">
-          <div class="badge">Last night logs</div>
+          <div class="badge">Last night activity</div>
           <div class="hr"></div>
           <div id="nightLog" class="log"></div>
+          <div class="hr"></div>
+          <button id="seeHistoryBtn" class="good menuWide">See all game history</button>
         </div>
       </div>
     </div>
@@ -604,6 +606,7 @@
       pendingCoupleId: null,
       silencedId: null,
       priestLastUseNight: null,
+      priestBlessedId: null,
       doppelgangerTargetId: null,
       doppelgangerPendingRole: null,
       doppelgangerRole: null,
@@ -970,6 +973,7 @@
       ...(snap.day || {})
     };
     if (state.day.priestLastUseNight == null) state.day.priestLastUseNight = null;
+    if (state.day.priestBlessedId == null) state.day.priestBlessedId = null;
     if (state.day.troublemakerLastUseNight == null) state.day.troublemakerLastUseNight = null;
     if (state.day.doppelgangerTargetId == null) state.day.doppelgangerTargetId = null;
     if (state.day.doppelgangerPendingRole == null) state.day.doppelgangerPendingRole = null;
@@ -2338,7 +2342,7 @@
     const entry = {
       day: dayNum,
       nightLog: [...state.day.lastNightLog],
-      dayAnnouncements: [...state.day.announcements],
+      announcements: [...state.day.announcements],
     };
     const idx = state.day.history.findIndex(x => x.day === dayNum);
     if (idx >= 0) state.day.history[idx] = entry;
@@ -2365,12 +2369,13 @@
       details.push("Day logs:");
       const sorted = state.day.history.slice().sort((a,b)=>a.day-b.day);
       for (const d of sorted){
-        details.push(`Day ${d.day}`);
-        details.push(`Night:`);
+        details.push(`Day ${d.day}:`);
+        details.push(`Night phase:`);
         if (d.nightLog.length) d.nightLog.forEach(l => details.push(`- ${l}`));
         else details.push(`- —`);
-        details.push(`Day:`);
-        if (d.dayAnnouncements.length) d.dayAnnouncements.forEach(l => details.push(`- ${l}`));
+        details.push(`Day phase:`);
+        const anns = d.announcements || [];
+        if (anns.length) anns.forEach(l => details.push(`- ${l}`));
         else details.push(`- —`);
         details.push("");
       }
@@ -2509,6 +2514,16 @@
       bittenEffective = bittenEffective.filter(id => id !== state.night.witchSaveId);
     }
 
+    // Priest blessing (permanent against bites)
+    if (state.night.priestProtectId){
+      state.day.priestBlessedId = state.night.priestProtectId;
+      appendNightLog(`Priest blessed ${labelPlayerWithRole(state.night.priestProtectId)} (immune to bites)`);
+      state.night.priestProtectId = null;
+    }
+    if (state.day.priestBlessedId){
+      bittenEffective = bittenEffective.filter(id => id !== state.day.priestBlessedId);
+    }
+
     // Cursed: bitten -> turns next night (does not die from bite)
     state.day.cursedBittenLastNight = [];
     const cursedBitten = bittenEffective.filter(id => {
@@ -2581,13 +2596,6 @@
       const dw = state.players.find(p => p.role === ROLE.DIRE_WOLF && p.alive);
       if (dw) deathSet.add(dw.id);
       appendNightLog(`Dire Wolf died with ${labelPlayerWithRole(state.day.direWolfTargetId)}.`);
-    }
-
-    // Priest protection (wolf bites only)
-    if (state.night.priestProtectId){
-      bittenEffective = bittenEffective.filter(id => id !== state.night.priestProtectId);
-      appendNightLog(`Priest protected ${labelPlayerWithRole(state.night.priestProtectId)} from bites`);
-      state.night.priestProtectId = null;
     }
 
     // Hunter chain (night death)
@@ -2751,6 +2759,7 @@
     const cursedPlayers = state.players.filter(p => p.role === ROLE.CURSED);
     const alive = cursedPlayers.some(p => p.alive);
     const bittenIds = state.day.cursedBittenLastNight || [];
+    const turnedIds = state.day.cursedTurnedIds || [];
     const lines = cursedPlayers.map(p => {
       const bitten = bittenIds.includes(p.id);
       const turned = turnedIds.includes(p.id);
@@ -2952,6 +2961,7 @@
     state.day.pendingCoupleId = null;
     state.day.silencedId = null;
     state.day.priestLastUseNight = null;
+    state.day.priestBlessedId = null;
     state.day.doppelgangerTargetId = null;
     state.day.doppelgangerPendingRole = null;
     state.day.doppelgangerRole = null;
@@ -2960,12 +2970,6 @@
     state.day.pendingDireWolfNight = null;
     state.day.cursedBittenLastNight = [];
     state.day.cursedTurnedIds = [];
-    state.day.doppelgangerTargetId = null;
-    state.day.doppelgangerPendingRole = null;
-    state.day.doppelgangerRole = null;
-    state.day.direWolfTargetId = null;
-    state.day.pendingDireWolfId = null;
-    state.day.pendingDireWolfNight = null;
     state.night.priestProtectId = null;
     state.night.priestUsed = false;
 
@@ -3162,6 +3166,7 @@
       state.day.pendingCoupleId = null;
       state.day.silencedId = null;
       state.day.priestLastUseNight = null;
+      state.day.priestBlessedId = null;
       state.day.doppelgangerTargetId = null;
       state.day.doppelgangerPendingRole = null;
       state.day.doppelgangerRole = null;
@@ -3170,12 +3175,6 @@
       state.day.pendingDireWolfNight = null;
       state.day.cursedBittenLastNight = [];
       state.day.cursedTurnedIds = [];
-    state.day.doppelgangerTargetId = null;
-    state.day.doppelgangerPendingRole = null;
-    state.day.doppelgangerRole = null;
-    state.day.direWolfTargetId = null;
-    state.day.pendingDireWolfId = null;
-    state.day.pendingDireWolfNight = null;
       state.night.priestProtectId = null;
       state.night.priestUsed = false;
 
@@ -3275,6 +3274,41 @@
     $("menuRoleSummaryBtn").onclick = async () => {
       closeMenu();
       await showRoleSummary();
+    };
+
+    $("seeHistoryBtn").onclick = async () => {
+      const details = [];
+      (state.day.history || []).forEach(d => {
+        const isCurrent = (d.day === state.night.number);
+        details.push(`Day ${d.day}:`);
+        details.push(`Night phase:`);
+        const logs = isCurrent ? (state.day.lastNightLog || []) : (d.nightLog || []);
+        if (logs.length) logs.forEach(l => details.push(`- ${l}`));
+        else details.push(`- —`);
+        details.push(`Day phase:`);
+        const anns = isCurrent ? (state.day.announcements || []) : (d.announcements || []);
+        if (anns.length) anns.forEach(l => details.push(`- ${l}`));
+        else details.push(`- —`);
+        details.push("");
+      });
+      const lastRecordedDay = (state.day.history || []).length
+        ? (state.day.history[state.day.history.length - 1].day || null)
+        : null;
+      if (state.gameStarted && lastRecordedDay !== state.night.number){
+        details.push(`Day ${state.night.number}:`);
+        details.push(`Night phase:`);
+        const logs = state.day.lastNightLog || [];
+        if (logs.length) logs.forEach(l => details.push(`- ${l}`));
+        else details.push(`- —`);
+        details.push(`Day phase:`);
+        const anns = state.day.announcements || [];
+        if (anns.length) anns.forEach(l => details.push(`- ${l}`));
+        else details.push(`- —`);
+        details.push("");
+      }
+      if (!details.length) details.push("No history yet.");
+      const html = `<div class="log">${escapeHtml(details.join("\n"))}</div>`;
+      await showModal({title:"Game History", message: html, confirmText:"OK", bigMessage:false, html:true});
     };
 
     // Night navigation
